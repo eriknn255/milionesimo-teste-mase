@@ -381,7 +381,7 @@ async function removerPrestadorCadastrado(id) {
    Ajuste aqui quando o backend for pra produção (hoje aponta pro servidor
    local rodando via `npm run dev`, ver backend/README.md).
    ========================================================================== */
-const API_BASE = "http://localhost:3000/api";
+const API_BASE = "https://mase-ec2.ruexinternet.com/api";
 
 // Mesma origem do backend, sem o "/api" — usada pra montar URL de imagem
 // estática servida por ele (ver fotoPerfilPrestador etc.). Caminho
