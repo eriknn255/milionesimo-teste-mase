@@ -345,14 +345,13 @@ async function removerPrestadorCadastrado(id) {
    ========================================================================== */
 const API_BASE = "https://mase-ec2.ruexinternet.com/api";
 
-// Domínio público do Vercel Blob store — é pra onde o backend sobe as
-// fotos de prestador agora (ver subirImagem em routes/prestadores.js),
-// em vez de servir estático da própria origem como antes. O nome do
-// arquivo continua determinístico a partir do id (allowOverwrite:true
-// no helper subirImagem substitui a foto anterior no mesmo caminho), só
-// o domínio que mudou de "mesma origem do backend + /uploads" pra isso
-// aqui direto — sem prefixo "/uploads" (ver fotoPerfilPrestador etc.).
-const BLOB_BASE = "https://9czuz65zwmelirz7.public.blob.vercel-storage.com";
+// Mesma origem do backend, sem o "/api" — usada pra montar URL de imagem
+// estática servida por ele (ver fotoPerfilPrestador etc.). Caminho
+// relativo tipo "/uploads/..." resolve contra a origem da PÁGINA, não do
+// backend — se o front for servido numa porta/domínio diferente do
+// backend, a imagem nunca carrega, por isso monta absoluta com
+// UPLOADS_BASE.
+const UPLOADS_BASE = API_BASE.replace(/\/api$/, "");
 
 // Mesmo teto do backend (LIMITE_PRESTADORES_POR_CONTA em prestadores.js) —
 // usado só pra UI (desabilitar/avisar antes de tentar); quem barra de
@@ -2151,10 +2150,10 @@ function abrirCadastroPrestador() {
 
         try {
             const capasUrls = fotosCapaPrestador(prestadorEmEdicao.id);
-            // busca as duas fotos atuais (direto do Blob store) antes de
-            // sobrescrever — o Vercel Blob já serve com CORS liberado por
-            // padrão, então esse fetch cross-origin funciona sem config
-            // extra no backend.
+            // busca as duas fotos atuais (mesmo servidor de uploads) antes de
+            // sobrescrever — se UPLOADS_BASE for outra origem sem CORS
+            // liberado pro static, esse fetch falha; nesse caso dá pra
+            // servir os uploads com header Access-Control-Allow-Origin.
             const [blobA, blobB] = await Promise.all([
                 fetch(`${capasUrls[indiceA - 1]}?t=${Date.now()}`).then((r) => r.blob()),
                 fetch(`${capasUrls[indiceB - 1]}?t=${Date.now()}`).then((r) => r.blob())
@@ -2446,20 +2445,20 @@ const ATRASO_BUSCA_MS = 400;
 
 /* ==========================================================================
    ROTAS DE IMAGEM — perfil (avatar) e capa (foto do local) são pastas
-   diferentes dentro do Vercel Blob store do backend (ver subirImagem em
-   routes/prestadores.js: "prestadores/perfil/{id}.webp" e
-   "prestadores/capa/{id}.webp"). Sem prefixo "/uploads" — isso era só da
-   versão antiga em disco, servida via express.static do próprio backend;
-   agora é o Blob store direto (BLOB_BASE), sem passar pela API. Nome do
-   arquivo continua determinístico a partir do id (allowOverwrite:true no
-   subirImagem substitui a foto anterior no mesmo caminho).
+   diferentes dentro de public/uploads/prestadores no backend. A URL
+   PÚBLICA é "/uploads/..." (o que o server.js expõe via
+   express.static — ver app.use("/uploads", ...)), não o caminho de
+   disco "backend/src/public/uploads/..." — usar o caminho de disco
+   como URL dá 404 na certa. Absoluta (com UPLOADS_BASE) pelo mesmo
+   motivo do urlAbsolutaFoto no backend: front e backend podem estar em
+   portas diferentes.
    ========================================================================== */
 function fotoPerfilPrestador(id) {
-    return `${BLOB_BASE}/prestadores/perfil/${id}.webp`;
+    return `${UPLOADS_BASE}/uploads/prestadores/perfil/${id}.webp`;
 }
 
 function fotoCapaPrestador(id) {
-    return `${BLOB_BASE}/prestadores/capa/${id}.webp`;
+    return `${UPLOADS_BASE}/uploads/prestadores/capa/${id}.webp`;
 }
 
 // 4 fotos de capa por prestador (a primeira reaproveita fotoCapaPrestador,
@@ -2469,9 +2468,9 @@ function fotoCapaPrestador(id) {
 function fotosCapaPrestador(id) {
     return [
         fotoCapaPrestador(id),
-        `${BLOB_BASE}/prestadores/capa/${id}-2.webp`,
-        `${BLOB_BASE}/prestadores/capa/${id}-3.webp`,
-        `${BLOB_BASE}/prestadores/capa/${id}-4.webp`
+        `${UPLOADS_BASE}/uploads/prestadores/capa/${id}-2.webp`,
+        `${UPLOADS_BASE}/uploads/prestadores/capa/${id}-3.webp`,
+        `${UPLOADS_BASE}/uploads/prestadores/capa/${id}-4.webp`
     ];
 }
 
