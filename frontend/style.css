@@ -1,0 +1,2782 @@
+:root {
+    /* ---- Sistema de cor ----
+       Chrome escuro (ink) pros controles que flutuam sobre o mapa,
+       superfícies claras (paper) pro conteúdo que precisa ser lido,
+       dourado como assinatura de confiança (nasceu das estrelas de
+       avaliação, promovido a acento principal), esmeralda como sinal
+       de dado positivo/ação (distância, disponibilidade). */
+    --ink: #14161f;
+    --ink-2: #1e2130;
+    --ink-text: #14161f;
+    --paper: #ffffff;
+    --gold: #d9a441;
+    --gold-soft: #f0c879;
+    --gold-tint: #fbf3e2;
+    --emerald: #1c7a5e;
+    --emerald-dark: #175f4a;
+    --muted: #6b6f7a;
+    --border: #e8e6e1;
+    --soft-blue: #0a72e2;
+    --back-red: #ff000045;
+
+    /* vermelho de erro/perigo (formulários, botões destrutivos) — distinto
+       de --back-red (que é um vermelho vivo, usado só como fundo leve
+       atrás de ícone em .SavedItemAction--remove); este aqui é o tom
+       "sólido" reaproveitado em botão de confirmar remoção, mensagem de
+       erro e linha de zona de perigo nas configurações. */
+    --danger: #c0392b;
+    --danger-rgb: 192, 57, 43;
+
+    /* tons derivados de superfície — usados em estados de pressão/fundo
+       sobre --paper e em placeholders neutros, antes soltos em hex
+       repetido por vários seletores */
+    --paper-tint: #f2efe8;
+    --placeholder-bg: #e4e4e7;
+    --skeleton-highlight: #f4f2ee;
+
+    /* cor de ícone/texto sobre fundo escuro (--ink) fora do fluxo do
+       .ThemedControl — mesmo tom usado em .theme-vector, só que aqui
+       fixo (ex: botão de fechar do perfil do prestador) */
+    --icon-on-dark: #eceaf5;
+
+    /* --shadow: usada fora deste arquivo (glyphColor do PinElement em
+       script.js) — mantida mesmo sem uso direto aqui dentro. */
+    --shadow: #0000004f;
+
+    /* sombra em duas camadas (difusa + de contato), mais profunda que um
+       flat-shadow único — usada nos elementos que flutuam livres sobre o mapa */
+    --shadow-float: 0 4px 16px rgba(10, 11, 20, 0.28), 0 1px 3px rgba(10, 11, 20, 0.2);
+    --shadow-float-hover: 0 6px 20px rgba(10, 11, 20, 0.32), 0 2px 5px rgba(10, 11, 20, 0.22);
+    --shadow-card: 0 10px 30px rgba(10, 11, 20, 0.14), 0 2px 8px rgba(10, 11, 20, 0.08);
+
+    /* trincas RGB dos tokens acima, só pra uso dentro de rgba() — CSS não
+       deixa embutir uma cor hex direto dentro de rgba(), então esses dois
+       existem pra que os glows/realces abaixo continuem amarrados aos
+       tokens (--gold, --emerald) em vez de duplicar o valor solto */
+    --gold-rgb: 217, 164, 65;
+    --emerald-rgb: 28, 122, 94;
+
+    --font-display: "Google Sans", Georgia, serif;
+    --font-body: 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+}
+
+body {
+    font-family: var(--font-body);
+    color: var(--ink-text);
+}
+
+header {
+    background-color: transparent;
+    padding: 14px 24px;
+    display: flex;
+    justify-content: center;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    pointer-events: none;
+}
+
+footer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    padding: 1.7vh 0;
+}
+
+/*///////////////////// Dock inferior  ///////////////////////*/
+.bottom-flexbox{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 0;
+    width: 100%;
+    padding: 0 0 0.25vh 0;
+    height: 7.9vh;
+}
+
+/* cápsula única de chrome escuro que substitui os botões brancos soltos —
+   a mesma família visual do botão de recentralizar sobre o mapa */
+.Dock {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1vh;
+    border-radius: 999px;
+    background-color: var(--ink);
+    box-shadow: var(--shadow-float);
+    pointer-events: auto;
+}
+
+.Dock button {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    border: none;
+    background-color: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+.Dock button:active {
+    background-color: transparent;
+    color: var(--gold-soft);
+    transform: scale(0.93);
+}
+
+/* ==========================================================================
+   ÍCONES DO DOCK — efeito oco/cheio
+   Home e Perfil: um SVG só por botão, o oco/cheio é a troca do fill via
+   .IconShape (nenhum ⇄ currentColor). Menu: mantido como antes, com dois
+   SVGs empilhados (.icon-oco / .icon-cheio) e crossfade de opacidade —
+   a pedido, revertido pra essa versão específica.
+   ========================================================================== */
+.NavIcon {
+    position: relative;
+    display: inline-flex;
+    width: 22px;
+    height: 22px;
+}
+
+.NavIcon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.NavIcon .IconShape {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    transition: fill 0.15s ease;
+}
+
+.Dock button.is-active .NavIcon .IconShape {
+    fill: currentColor;
+}
+
+/* Menu — versão com dois SVGs e crossfade (mantida como antes a pedido) */
+.NavIcon .icon-oco,
+.NavIcon .icon-cheio {
+    position: absolute;
+    inset: 0;
+    opacity: 1;
+    transition: opacity 0.15s ease;
+}
+
+.NavIcon .icon-cheio { opacity: 0; }
+
+.Dock button.is-active .NavIcon .icon-oco { opacity: 0; }
+.Dock button.is-active .NavIcon .icon-cheio { opacity: 1; }
+
+.MapControls, .SearchRow, .ChipsRow, .ResultsList { pointer-events: auto; }
+
+.SearchWrap {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 480px;
+    width: 100%;
+}
+
+.SearchRow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+}
+
+.FindBox { flex: 1; position: relative; }
+
+.MapFind {
+    width: 100%;
+    height: 44px;
+    padding: 0 40px 0 18px;
+    border: none;
+    border-radius: 999px;
+    background-color: var(--paper);
+    color: var(--ink-text);
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 15px;
+    box-shadow: var(--shadow-float);
+}
+.MapFind::placeholder { color: var(--muted); font-weight: 500; }
+.MapFind:focus {
+    outline: none;
+    box-shadow: var(--shadow-float-hover), 0 0 0 3px rgba(var(--gold-rgb), 0.35);
+}
+
+/* Botão "x" pra apagar a busca de uma vez — só aparece com texto no
+   campo (ver atualizarVisibilidadeClearBtn em script.js). Fica dentro do
+   próprio FindBox, então não disputa espaço com o botão de lupa (FindIcon,
+   que continua fora, à direita de tudo). */
+.ClearSearchBtn {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    width: 26px;
+    height: 26px;
+    border: none;
+    border-radius: 50%;
+    background-color: var(--paper-tint);
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.ClearSearchBtn svg { width: 13px; height: 13px; }
+.ClearSearchBtn:active { background-color: var(--border); }
+
+/* .ClearSearchBtn define display:flex, que empataria em especificidade
+   com a regra padrão do navegador pra [hidden] (display:none) — e como
+   essa aqui é regra "nossa" (autor), ela venceria por último no cascade
+   mesmo com o atributo hidden presente. Essa regra reforça o hidden. */
+.ClearSearchBtn[hidden] { display: none; }
+
+/* ==========================================================================
+   CHIPS DE CATEGORIA RÁPIDA
+   Fila horizontal com scroll (sem barra visível) logo abaixo da busca —
+   um toque filtra por categoria sem precisar digitar nada. O estado ativo
+   usa o dourado (mesma assinatura de "confiança/seleção" do resto do app,
+   ver --gold). A troca de classe é feita em script.js (ativarChipPorQuery).
+   ========================================================================== */
+.ChipsRow {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding: 1px 2px 3px;
+}
+
+.ChipsRow::-webkit-scrollbar { display: none; }
+
+.Chip {
+    flex-shrink: 0;
+    padding: 9px 16px;
+    border: none;
+    border-radius: 999px;
+    background-color: var(--paper);
+    color: var(--ink-text);
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 13px;
+    white-space: nowrap;
+    transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+}
+
+.Chip:active {
+    transform: scale(0.94);
+}
+
+/* !important aqui pelo mesmo motivo de .RecenterButton.is-centering e
+   .CircleBtn--accent (mais abaixo no arquivo): como todo .Chip também é
+   .ThemedControl, essa regra precisa vencer .ThemedControl.theme-vector
+   (mesma especificidade, duas classes) sem depender de onde cada uma
+   fica no arquivo — o estado ativo tem que se sobrepor ao tema, claro
+   ou escuro, sempre. */
+.Chip.is-active {
+    background-color: var(--gold) !important;
+    color: var(--ink) !important;
+}
+
+/* ==========================================================================
+   PRESET: botão circular flutuante
+   Base única pra qualquer botão redondo com sombra que flutua sobre o
+   mapa/conteúdo (busca, camadas, recentralizar, e qualquer um que vier
+   depois). Pra criar um novo, é só usar:
+
+     <button class="CircleBtn CircleBtn--md ThemedControl">...</button>
+
+   .CircleBtn           → forma, sombra, transições (sempre presente)
+   .CircleBtn--sm/md/lg → tamanho (define --circle-size)
+   .ThemedControl       → entra no esquema claro/escuro automático do mapa
+                           (a classe .theme-vector é alternada via JS —
+                           ver aplicarTemaControles em maps.js — em TODOS
+                           os elementos .ThemedControl de uma vez, sem
+                           precisar listar cada botão manualmente)
+   ========================================================================== */
+.CircleBtn {
+    --circle-size: 46px;
+    flex-shrink: 0;
+    width: var(--circle-size);
+    height: var(--circle-size);
+    border: none;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow-float);
+    transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+}
+
+.CircleBtn:active {
+    box-shadow: transparent;
+    transform: scale(0.93);
+}
+
+.CircleBtn svg {
+    width: 45%;
+    height: 45%;
+    fill: currentColor;
+}
+.CircleBtn svg path { fill: currentColor; }
+
+/* tamanhos do preset — escolha um por botão */
+.CircleBtn--sm { --circle-size: 44px; }
+.CircleBtn--md { --circle-size: 46px; }
+
+/* esquema de cor claro/escuro automático (segue o tema do mapa) */
+.ThemedControl {
+    background-color: var(--paper);
+    color: var(--ink);
+}
+.ThemedControl:active {color: var(--gold-soft); }
+
+.ThemedControl.theme-vector { background-color: var(--ink); color: var(--icon-on-dark); }
+.ThemedControl.theme-vector:active { color: var(--gold-soft); }
+
+/* modificador opcional: acento fixo (ex: RecenterButton), fica por cima
+   do ThemedControl sem depender do tema */
+.CircleBtn--accent { color: var(--soft-blue) !important; }
+
+/*///////////////////// Lista de resultados  ///////////////////////*/
+.ResultsList {
+    background-color: var(--paper);
+    border-radius: 20px;
+    box-shadow: var(--shadow-card);
+    max-height: 46vh;
+    overflow-y: auto;
+}
+
+.ResultsList[hidden] { display: none; }
+
+.ResultsList .ResultsHeader {
+    padding: 14px 18px 6px;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+/* ==========================================================================
+   ESTADO VAZIO
+   Ícone + texto + sugestões de categorias próximas (clicáveis, disparam a
+   mesma busca dos chips — ver buscarPorCategoria em script.js), em vez de
+   só uma frase solta. As sugestões vêm de um subconjunto de
+   CATEGORIAS_CHIPS (ver QUERIES_SUGESTAO_VAZIO em script.js).
+   ========================================================================== */
+.ResultsEmpty {
+    padding: 30px 20px 26px;
+    text-align: center;
+}
+
+.ResultsEmptyIcon {
+    width: 38px;
+    height: 38px;
+    margin: 0 auto 12px;
+    color: var(--border);
+}
+
+.ResultsEmptyText {
+    font-size: 14px;
+    color: var(--muted);
+    margin-bottom: 4px;
+}
+
+.ResultsEmptyHint {
+    font-size: 12px;
+    color: var(--muted);
+    opacity: 0.8;
+    margin-bottom: 14px;
+}
+
+.ResultsEmptySuggestions {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.ResultsEmptySuggestion {
+    padding: 8px 15px;
+    border: none;
+    border-radius: 999px;
+    background-color: var(--paper-tint);
+    color: var(--ink-text);
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 12.5px;
+    transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+.ResultsEmptySuggestion:active {
+    background-color: var(--gold-soft);
+    transform: scale(0.95);
+}
+
+.ResultItem {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 11px 18px;
+    border: none;
+    background: transparent;
+    text-align: left;
+    font-family: inherit;
+    border-top: 1px solid var(--border);
+    transition: background-color 0.15s ease;
+}
+
+.ResultsList .ResultsHeader + .ResultItem { border-top: none; }
+
+.ResultItem:active { background-color: var(--paper-tint); }
+
+.ResultItem .ResultAvatar {
+    flex-shrink: 0;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--paper);
+    font-weight: 700;
+    font-size: 15px;
+}
+
+.ResultItem .ResultInfo {
+    flex: 1;
+    min-width: 0;
+}
+
+.ResultItem .ResultName {
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--ink-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ResultItem .ResultMeta {
+    font-size: 12.5px;
+    color: var(--muted);
+    margin-top: 3px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.ResultItem .ResultRating { color: var(--gold); font-weight: 700; }
+.ResultItem .ResultRating.is-empty { color: var(--muted); font-weight: 600; }
+
+.ResultItem .ResultDistance {
+    flex-shrink: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--emerald);
+    white-space: nowrap;
+}
+
+/* ==========================================================================
+   AÇÕES DA LISTA DE SALVOS (contatar / remover)
+   .ResultItem aqui deixa de ser o próprio elemento clicável (era um
+   <button> só) e vira um wrapper com dois filhos: .SavedItemMain (a parte
+   clicável de sempre, abre o perfil) e .SavedItemActions (os dois ícones
+   novos, cada um com seu próprio clique — ambos param a propagação pra
+   não abrir o perfil por baixo, ver renderizarPaginaSalvos em script.js).
+   Só ícone, sem rótulo, a pedido — aria-label cobre a acessibilidade.
+   ========================================================================== */
+.ResultItem.SavedItem {
+    padding: 0;
+    align-items: stretch;
+}
+
+.SavedItemMain {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 18px;
+    border: none;
+    background: transparent;
+    text-align: left;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.SavedItemMain:active { background-color: var(--paper-tint); }
+
+.SavedItemActions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    padding-right: 14px;
+}
+
+.SavedItemAction {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background-color: var(--paper-tint);
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+.SavedItemAction svg {
+    width: 17px;
+    height: 17px;
+}
+
+.SavedItemAction:active { transform: scale(0.92); }
+
+.SavedItemAction--contact { color: var(--emerald); }
+
+.SavedItemAction--remove {
+    background-color: var(--back-red);
+    color: var(--ink-text);
+}
+
+.SavedItemAction--remove:active {
+    background-color: var(--border);
+    color: var(--ink-text);
+}
+
+/* ==========================================================================
+   SKELETON DA LISTA (carregando)
+   Placeholder animado mostrado enquanto a busca "processa" (ver
+   ATRASO_BUSCA_MS em script.js) — mesma estrutura/espaçamento do
+   .ResultItem real, pra não pular o layout quando o resultado chega.
+   Usado tanto na busca por digitação quanto nos chips/sugestões de
+   categoria, pra manter a mesma sensação de "buscando de verdade".
+   ========================================================================== */
+.ResultSkeleton {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 11px 18px;
+    border-top: 1px solid var(--border);
+}
+
+.ResultsList .ResultSkeleton:first-child { border-top: none; }
+
+.SkeletonBlock {
+    border-radius: 8px;
+    background: linear-gradient(90deg, var(--border) 25%, var(--skeleton-highlight) 37%, var(--border) 63%);
+    background-size: 400% 100%;
+    animation: skeleton-shimmer 1.4s ease infinite;
+}
+
+.SkeletonAvatar {
+    flex-shrink: 0;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+}
+
+.SkeletonLines {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.SkeletonLine--title { width: 55%; height: 12px; }
+.SkeletonLine--meta { width: 35%; height: 10px; }
+
+.SkeletonDistance {
+    flex-shrink: 0;
+    width: 34px;
+    height: 12px;
+}
+
+@keyframes skeleton-shimmer {
+    0% { background-position: 100% 0; }
+    100% { background-position: 0 0; }
+}
+
+/* ==========================================================================
+   PÁGINAS (Home / Perfil / Menu)
+   Só uma fica visível por vez, trocada via classe .is-active (JS em
+   script.js, função trocarAba()). O Dock/footer fica fora daqui, sempre
+   visível — só o conteúdo entre header e footer troca.
+   ========================================================================== */
+.Page {
+    position: absolute;
+    inset: 0;
+    display: none;
+}
+
+.Page.is-active {
+    display: block;
+}
+
+/* ==========================================================================
+   PÁGINA SALVOS
+   Conteúdo gerado por renderizarPaginaSalvos() em script.js — o HTML só
+   define o título e o container. padding-bottom soma a altura do Dock
+   (7.9vh, ver .bottom-flexbox) pra a última linha da lista não ficar
+   escondida atrás dele. O estado vazio reaproveita as mesmas
+   classes .ResultsEmpty* da busca — mesma linguagem visual, sem duplicar
+   estilo.
+   ========================================================================== */
+.SavedPage {
+    height: 100%;
+    overflow-y: auto;
+    background-color: var(--paper);
+    padding-bottom: 7.9vh;
+}
+
+.SavedPageTitle {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--ink-text);
+    padding: 20px 20px 12px;
+}
+
+.SavedList .ResultItem { border-top: 1px solid var(--border); }
+.SavedList .ResultItem:first-child { border-top: none; }
+
+/* ==========================================================================
+   PERFIL DO PRESTADOR ("Ver perfil", botão secundário no popup do mapa)
+   Overlay de tela cheia, criado/destruído sob demanda via
+   abrirPerfilPrestador()/fecharPerfilPrestador() em script.js — não faz
+   parte do sistema de .Page (aquele é só Home/Perfil-do-usuário/Menu).
+   z-index acima de tudo (header/Dock são 10) pra cobrir a tela inteira
+   enquanto está aberto.
+   ========================================================================== */
+.ProviderProfile {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    background-color: var(--paper);
+    overflow-y: auto;
+    animation: perfil-entrar 0.2s ease;
+}
+
+@keyframes perfil-entrar {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.ProviderProfileCover {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background-color: var(--placeholder-bg);
+}
+
+.ProviderProfileCoverImg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    opacity: 0;
+    transition: opacity 0.6s ease;
+}
+.ProviderProfileCoverImg.is-active { opacity: 1; }
+
+.ProviderProfileClose {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 38px;
+    height: 38px;
+    border: none;
+    border-radius: 50%;
+    background-color: var(--ink);
+    color: var(--icon-on-dark);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow-float);
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+.ProviderProfileClose svg { width: 18px; height: 18px; }
+.ProviderProfileClose:active { color: var(--gold-soft); }
+
+.ProviderProfileBody {
+    /* padding-bottom soma a altura do Dock (7.9vh) — a tela de perfil não
+       tem Dock próprio, mas ele continua visível por baixo do overlay
+       (z-index menor), então evitamos que o conteúdo termine colado nele. */
+    padding: 20px 22px calc(7.9vh + 28px);
+}
+
+.ProviderProfileHeader {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.ProviderProfileAvatar {
+    flex-shrink: 0;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--paper);
+    font-weight: 700;
+    font-size: 20px;
+}
+
+.ProviderProfileName {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--ink-text);
+}
+
+.ProviderProfileCategory {
+    font-size: 14px;
+    color: var(--muted);
+    margin-top: 2px;
+}
+
+.ProviderProfileRating {
+    margin-top: 18px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--gold);
+}
+.ProviderProfileRating span { color: var(--muted); font-weight: 500; }
+.ProviderProfileRating.is-empty { color: var(--muted); font-weight: 600; }
+
+/* ==========================================================================
+   BADGE "ABERTO AGORA" / "FECHADO AGORA"
+   Um único componente (.StatusBadge) reaproveitado no popup do mapa, na
+   tela de Perfil e na lista de resultados — ver badgeHorarioHTML() em
+   script.js. Esmeralda = disponível agora (mesmo sinal de "positivo" já
+   usado em distância), tom neutro = fechado, sem soar como erro/alerta.
+   ========================================================================== */
+.StatusBadge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+
+.StatusBadge--aberto {
+    background-color: rgba(var(--emerald-rgb), 0.12);
+    color: var(--emerald);
+}
+
+.StatusBadge--fechado {
+    background-color: var(--paper-tint);
+    color: var(--muted);
+}
+
+.StatusBadgeHorario {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.ProviderProfileStatusRow,
+.ResultStatusRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+}
+
+.ProviderProfileBio {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--ink-text);
+}
+
+.ProviderProfileSection {
+    margin-top: 20px;
+}
+
+.ProviderProfileSectionTitle {
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+}
+
+.ProviderProfileReview {
+    background-color: var(--paper-tint);
+    border-radius: 16px;
+    padding: 14px 16px;
+}
+
+.ProviderProfileReviewHeader {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ProviderProfileReviewAvatar {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background-color: var(--ink);
+    color: var(--paper);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 13px;
+}
+
+.ProviderProfileReviewName {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--ink-text);
+}
+
+.ProviderProfileReviewStars {
+    font-size: 12px;
+    color: var(--gold);
+    margin-top: 1px;
+}
+
+.ProviderProfileReviewText {
+    margin-top: 10px;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--ink-text);
+}
+
+.ProviderProfileReviewEmpty {
+    background-color: var(--paper-tint);
+    border-radius: 16px;
+    padding: 14px 16px;
+    font-size: 13.5px;
+    color: var(--muted);
+}
+
+/* ==========================================================================
+   GALERIA "FOTOS DOS CLIENTES"
+   Grade de 3 colunas, cada foto abre em tela cheia (.PhotoLightbox) ao
+   tocar — ver abrirLightbox() em script.js. Fotos reais enviadas pelo
+   cliente junto da avaliação (GET /prestadores/:id/fotos-clientes),
+   só de avaliações publicadas. Sem nenhuma ainda, mostra
+   .ProviderProfileGalleryEmpty em vez da grade.
+   ========================================================================== */
+.ProviderProfileGallery {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.ProviderProfileGalleryItem {
+    position: relative;
+    aspect-ratio: 1;
+    border: none;
+    border-radius: 12px;
+    overflow: hidden;
+    padding: 0;
+    background-color: var(--placeholder-bg);
+}
+
+.ProviderProfileGalleryItem img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.ProviderProfileGalleryCaption {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 4px 6px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #ffffff;
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.55));
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Estado vazio da galeria — prestador ainda sem nenhuma avaliação
+   publicada com foto. Mesmo tom visual do .CadastroHint (fundo suave,
+   texto --muted), pra não parecer um erro. */
+.ProviderProfileGalleryEmpty {
+    font-size: 13px;
+    color: var(--muted);
+    background-color: var(--paper-tint);
+    border-radius: 12px;
+    padding: 14px;
+    text-align: center;
+}
+
+/* Campo de foto no formulário de avaliação (abrirAvaliarPrestador) — o
+   <input type="file"> real fica hidden; o botão visível é o <label>
+   apontando pra ele (clicar no label abre o seletor nativo). Depois de
+   escolher uma foto, o botão some e dá lugar à prévia. */
+.AvaliarFotoBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 46px;
+    border: 1px dashed var(--border);
+    border-radius: 14px;
+    color: var(--muted);
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.AvaliarFotoBtn svg {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+}
+
+.AvaliarFotoBtn:hover {
+    border-color: var(--gold);
+    color: var(--ink-text);
+}
+
+.AvaliarFotoBtn[hidden] { display: none; }
+
+.AvaliarFotoPreview {
+    position: relative;
+    width: 100%;
+    max-width: 160px;
+    aspect-ratio: 1;
+    border-radius: 14px;
+    overflow: hidden;
+    background-color: var(--paper-tint);
+}
+
+.AvaliarFotoPreview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.AvaliarFotoRemover {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 26px;
+    height: 26px;
+    border: none;
+    border-radius: 50%;
+    background-color: rgba(20, 22, 31, 0.65);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.AvaliarFotoRemover svg { width: 14px; height: 14px; }
+
+/* Lightbox de tela cheia — z-index acima do .ProviderProfile (30), já
+   que abre por cima dele. */
+.PhotoLightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background-color: rgba(20, 22, 31, 0.92);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    animation: perfil-entrar 0.15s ease;
+}
+
+.PhotoLightboxImg {
+    max-width: 100%;
+    max-height: 70vh;
+    border-radius: 12px;
+    object-fit: contain;
+}
+
+.PhotoLightboxCaption {
+    margin-top: 14px;
+    color: var(--icon-on-dark);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.PhotoLightboxClose {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 40px;
+    height: 40px;
+    border: none;
+    border-radius: 50%;
+    background-color: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s ease;
+}
+.PhotoLightboxClose:active { background-color: rgba(255, 255, 255, 0.24); }
+.PhotoLightboxClose svg { width: 18px; height: 18px; }
+
+.ProviderProfileWhatsapp {
+    margin-top: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: 999px;
+    background-color: var(--emerald);
+    color: var(--paper);
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 14.5px;
+    text-decoration: none;
+    box-shadow: 0 2px 8px rgba(var(--emerald-rgb), 0.35);
+    transition: background-color 0.15s ease, transform 0.1s ease;
+}
+.ProviderProfileWhatsapp:active {
+    transform: scale(0.98);
+    background-color: var(--emerald-dark);
+}
+.ProviderProfileWhatsapp svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
+/* Botões secundários do perfil (Salvar na lista / Avaliar prestador).
+   Lado a lado, mais discretos que o WhatsApp (contorno em vez de fundo
+   cheio), pra não competir com a ação principal. "Avaliar prestador"
+   segue só na UI, sem listener; "Salvar na lista" tem estado real (ver
+   alternarPrestadorSalvo em script.js) — quando salvo, usa o mesmo
+   dourado da nota/avaliação como assinatura de "confiança/selecionado",
+   e o ícone de marcador vira sólido (mesmo padrão oco→cheio do resto
+   do app, ver .SaveIconShape). */
+.ProviderProfileSecondaryActions {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.ProviderProfileSecondaryBtn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    padding: 12px 8px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background-color: var(--paper);
+    color: var(--ink-text);
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 12px;
+    text-align: center;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+.ProviderProfileSecondaryBtn:active {
+    background-color: var(--paper-tint);
+    transform: scale(0.97);
+}
+
+.ProviderProfileSecondaryBtn svg {
+    width: 20px;
+    height: 20px;
+    color: var(--muted);
+}
+
+.ProviderProfileSecondaryBtn.is-saved {
+    border-color: var(--gold);
+    color: var(--gold);
+}
+
+.ProviderProfileSecondaryBtn.is-saved svg { color: var(--gold); }
+
+.ProviderProfileSecondaryBtn.is-saved .SaveIconShape { fill: currentColor; }
+
+.ProviderProfileSecondaryBtn.is-saved:active { background-color: var(--gold-tint); }
+
+/* Wrapper do mapa dentro da Home — antes essa posição vinha de uma <div>
+   solta e sem classe; agora tem nome próprio pra não depender de seletor
+   genérico de tag. */
+.MapWrap {
+    position: absolute;
+    inset: 0;
+}
+
+/* Escopado a .MapWrap de propósito (não "gmp-map" pelado): esse seletor
+   já vazou uma vez pro mini-mapa do formulário de cadastro (ele também é
+   um <gmp-map>, mas vive contido num card de 180px) — position:absolute
+   sem esse escopo posiciona qualquer <gmp-map> futuro relativo ao
+   ancestral errado. Ver .CadastroMapPicker gmp-map mais abaixo, que
+   define seu próprio contêiner em vez de depender desta regra. */
+.MapWrap gmp-map {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+}
+
+/* ==========================================================================
+   BOLHA DE CLUSTER (agrupamento de pins)
+   Conteúdo do AdvancedMarkerElement devolvido pelo clusterRenderer em
+   script.js — substitui vários pins próximos por essa bolha única com a
+   contagem, quando o zoom atual deixaria os pins colados/ilegíveis. Segue
+   o chrome do resto do app (ink + dourado) em vez do azul padrão da
+   biblioteca de clustering (@googlemaps/markerclusterer, carregada via
+   CDN no index.html).
+   ========================================================================== */
+.PinCluster {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 40px;
+    height: 40px;
+    padding: 0 6px;
+    border-radius: 50%;
+    border: 3px solid var(--ink-text);
+    background-color: var(--soft-blue);
+    color: var(--border);
+    font-family: var(--font-body);
+    font-weight: 800;
+    font-size: 14px;
+    box-shadow: var(--shadow-float);
+    cursor: pointer;
+}
+
+/* ==========================================================================
+   MARCADOR EM FORMATO DE AVATAR (substitui o PinElement padrão do Google)
+   Ver criarConteudoAvatarMarcador() em script.js. Círculo (foto/inicial,
+   mesmo fallback de avatarHTML) + rabinho triangular embaixo, na mesma
+   cor do prestador — os dois em fluxo normal (sem position:absolute)
+   de propósito: o AdvancedMarkerElement ancora pelo centro-inferior da
+   caixa do content, então a ponta do rabinho já cai exatamente sobre a
+   coordenada real, sem precisar calcular nenhum offset manualmente.
+   ========================================================================== */
+.AvatarPin {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 44px;
+    cursor: pointer;
+    filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.25));
+}
+
+.AvatarPinCircle {
+    position: relative;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2.5px solid var(--paper);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--paper);
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 15px;
+    text-transform: uppercase;
+}
+
+.AvatarPinCircle img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.AvatarPinTail {
+    width: 0;
+    height: 0;
+    margin-top: -3px; /* sobrepõe levemente o círculo, sem "costura" visível entre os dois */
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 9px solid; /* border-top-color é setada por prestador via style inline (mesma cor do círculo) */
+}
+
+/* ==========================================================================
+   FORMULÁRIO DE CADASTRO DE PRESTADOR
+   Vive dentro do overlay .CadastroOverlay (aberto a partir do Perfil, ver
+   abrirCadastroPrestador em script.js), que reaproveita o chrome de
+   .ProviderProfile — aqui é só o miolo do formulário em si.
+   ========================================================================== */
+.CadastroOverlay .ProviderProfileBody {
+    padding-top: 4px;
+}
+
+.CadastroOverlayHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 22px 6px;
+}
+
+.CadastroOverlayTitle {
+    font-family: var(--font-display);
+    font-size: 19px;
+    font-weight: 600;
+    color: var(--ink-text);
+}
+
+.CadastroOverlayClose {
+    flex-shrink: 0;
+    width: 34px;
+    height: 34px;
+    border: none;
+    border-radius: 50%;
+    background-color: var(--paper-tint);
+    color: var(--ink-text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s ease;
+}
+.CadastroOverlayClose svg { width: 16px; height: 16px; }
+.CadastroOverlayClose:active { background-color: var(--border); }
+
+.CadastroWrap {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 0;
+}
+
+.CadastroSubtitle {
+    margin-top: 4px;
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.CadastroForm {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.CadastroField {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+}
+
+.CadastroFieldRow {
+    display: flex;
+    gap: 12px;
+}
+
+.CadastroLabel {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--ink-text);
+}
+
+.CadastroInput {
+    height: 46px;
+    padding: 0 14px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background-color: var(--paper);
+    color: var(--ink-text);
+    font-family: var(--font-body);
+    font-size: 14.5px;
+}
+
+.CadastroInput:focus {
+    outline: none;
+    border-color: var(--gold);
+    box-shadow: 0 0 0 3px rgba(var(--gold-rgb), 0.2);
+}
+
+/* textarea reaproveita .CadastroInput (borda, fundo, fonte) — só ajusta o
+   que um campo de texto de uma linha não precisa (altura fixa, resize). */
+.CadastroTextarea {
+    height: auto;
+    padding: 12px 14px;
+    resize: vertical;
+    min-height: 90px;
+    line-height: 1.4;
+    font-family: var(--font-body);
+}
+
+/* Seletor de nota (1-5 estrelas) do formulário de avaliação — ver
+   abrirAvaliarPrestador() em script.js. Cada botão é uma estrela; clicar
+   preenche a si mesma e todas as anteriores via .is-active (mesmo padrão
+   visual de "3 de 5 estrelas" que qualquer um já reconhece). */
+.AvaliarStars {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    padding: 4px 0 2px;
+}
+
+.AvaliarStar {
+    width: 42px;
+    height: 42px;
+    border: none;
+    background-color: transparent;
+    color: var(--border);
+    font-size: 30px;
+    line-height: 1;
+    transition: color 0.15s ease, transform 0.1s ease;
+}
+
+.AvaliarStar:active { transform: scale(0.9); }
+.AvaliarStar.is-active { color: var(--gold); }
+
+.CadastroHint {
+    font-size: 12.5px;
+    color: var(--muted);
+    background-color: var(--paper-tint);
+    border-radius: 12px;
+    padding: 10px 12px;
+}
+
+.CadastroSubmit {
+    margin-top: 6px;
+    height: 48px;
+    border: none;
+    border-radius: 999px;
+    background-color: var(--ink);
+    color: var(--paper);
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 15px;
+    transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+.CadastroSubmit:active {
+    transform: scale(0.98);
+    background-color: var(--ink-2);
+}
+
+.CadastroSuccess {
+    margin-top: 18px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 14px 16px;
+    border-radius: 16px;
+    background-color: rgba(var(--emerald-rgb), 0.1);
+    color: var(--emerald);
+}
+
+/* Mesmo caso do .ClearSearchBtn[hidden] lá em cima: .CadastroSuccess
+   define display:flex, que empata em especificidade com o display:none
+   padrão do atributo hidden — sem isso aqui, o card de sucesso fica
+   visível desde o início (ex: "Avaliação enviada!" já aparecendo antes
+   de enviar nada), porque a regra do autor vence. */
+.CadastroSuccess[hidden] { display: none; }
+
+.CadastroSuccess svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.CadastroSuccessTitle {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--emerald);
+}
+
+.CadastroSuccessText {
+    margin-top: 2px;
+    font-size: 12.5px;
+    color: var(--ink-text);
+}
+
+/* ==========================================================================
+   GERENCIAR FOTOS DO PRESTADOR (overlay aberto por abrirFotosPrestador)
+   Sem passo de "Salvar/Cancelar" separado — o corte da imagem (ver
+   .CropOverlay mais abaixo) já é a confirmação, e o upload sobe sozinho
+   logo em seguida com um anel de progresso sobre a própria miniatura.
+   ========================================================================== */
+.FotosPrestadorSection + .FotosPrestadorSection {
+    margin-top: 28px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+}
+
+.FotosPrestadorAvatarRow {
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.FotosPrestadorAvatarPreview {
+    position: relative;
+    flex-shrink: 0;
+    width: 84px;
+    height: 84px;
+}
+
+.FotosPrestadorAvatarLabel {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    overflow: hidden;
+    background-color: var(--placeholder-bg);
+    border: 2px solid var(--gold-tint);
+    cursor: pointer;
+}
+
+.FotosPrestadorAvatarLabel img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+/* Badge fixa de câmera no canto — substitui o antigo overlay "Trocar"
+   que só aparecia durante o toque; assim fica claro que é editável
+   sem precisar tocar pra descobrir. */
+.FotosPrestadorAvatarBadge {
+    position: absolute;
+    right: -2px;
+    bottom: -2px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background-color: var(--ink);
+    color: var(--paper);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--paper);
+    pointer-events: none;
+}
+
+.FotosPrestadorCapaGrid {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.FotosPrestadorCapaItem {
+    position: relative;
+}
+
+.FotosPrestadorCapaTile {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    border-radius: 14px;
+    overflow: hidden;
+    background-color: var(--placeholder-bg);
+    border: 2px solid transparent;
+    transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.FotosPrestadorCapaTile.is-empty {
+    border: 2px dashed var(--border);
+    background-color: var(--paper-tint);
+}
+
+.FotosPrestadorCapaTileLabel {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+}
+
+.FotosPrestadorCapaTileLabel img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.FotosPrestadorCapaTileAdd {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--muted);
+    pointer-events: none;
+}
+
+.FotosPrestadorCapaTile.is-empty .FotosPrestadorCapaTileAdd { display: flex; }
+
+.FotosPrestadorCapaBadge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 2;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background-color: var(--gold);
+    color: var(--ink);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    pointer-events: none;
+}
+
+/* Alça de arrastar — só aparece quando o slot tem foto de verdade (ver
+   onload/onerror inline em abrirFotosPrestador). touch-action:none evita
+   que o navegador tente rolar a página enquanto arrasta no toque. */
+.FotosPrestadorCapaGrip {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 2;
+    width: 26px;
+    height: 26px;
+    border: none;
+    border-radius: 50%;
+    background-color: rgba(20, 22, 31, 0.55);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    touch-action: none;
+}
+
+.FotosPrestadorCapaItem.is-dragging .FotosPrestadorCapaTile {
+    transform: scale(1.05);
+    box-shadow: var(--shadow-card);
+    opacity: 0.92;
+}
+
+.FotosPrestadorCapaItem.is-dragging .FotosPrestadorCapaGrip { cursor: grabbing; }
+
+.FotosPrestadorCapaItem.is-drop-target .FotosPrestadorCapaTile { border-color: var(--gold); }
+
+.FotosPrestadorCapaItem.is-drop-invalido .FotosPrestadorCapaTile { border-color: var(--danger); }
+
+/* Anel de progresso sobre a própria miniatura (avatar ou capa) — a
+   circunferência 97.39 é fixa (2 * PI * 15.5, raio do círculo no SVG),
+   só o stroke-dashoffset muda via JS conforme o upload avança. */
+.FotosPrestadorUploadProgress {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    background-color: rgba(20, 22, 31, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.FotosPrestadorAvatarPreview .FotosPrestadorUploadProgress { border-radius: 50%; }
+
+/* sem isso, [hidden] perde pra .FotosPrestadorUploadProgress { display:flex }
+   na cascata (mesma especificidade, essa regra vem depois) e o anel de
+   progresso fica sempre visível — era exatamente o bug do "0% travado". */
+.FotosPrestadorUploadProgress[hidden] { display: none; }
+.FotosPrestadorCapaGrip[hidden] { display: none; }
+
+.FotosPrestadorProgressRing {
+    width: 44px;
+    height: 44px;
+    transform: rotate(-90deg);
+}
+
+.FotosPrestadorProgressTrack {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.25);
+    stroke-width: 3;
+}
+
+.FotosPrestadorProgressBar {
+    fill: none;
+    stroke: var(--gold-soft);
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-dasharray: 97.39;
+    stroke-dashoffset: 97.39;
+    transition: stroke-dashoffset 0.1s linear;
+}
+
+.FotosPrestadorProgressPct {
+    position: absolute;
+    color: #ffffff;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.FotosPrestadorSalvarBtn,
+.FotosPrestadorCancelarBtn {
+    flex: 1;
+    height: 40px;
+    border: none;
+    border-radius: 999px;
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 13px;
+}
+
+.FotosPrestadorSalvarBtn {
+    background-color: var(--ink);
+    color: var(--paper);
+}
+
+.FotosPrestadorCancelarBtn {
+    background-color: var(--paper-tint);
+    color: var(--ink-text);
+}
+
+.FotosPrestadorSalvarBtn:active { opacity: 0.85; }
+.FotosPrestadorCancelarBtn:active { background-color: var(--border); }
+
+.FotosPrestadorSalvarBtn:disabled,
+.FotosPrestadorCancelarBtn:disabled {
+    opacity: 0.5;
+}
+
+/* ==========================================================================
+   CROP DE IMAGEM (abrirCropImagem) — tela cheia acima de tudo, exceto o
+   ConfirmOverlay (999); abre por cima do overlay de Fotos (30) na hora
+   de escolher avatar ou capa, antes de qualquer upload acontecer.
+   ========================================================================== */
+.CropOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 970;
+    background-color: rgba(10, 11, 20, 0.94);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    gap: 20px;
+}
+
+.CropHeader { text-align: center; color: var(--icon-on-dark); }
+
+.CropTitle { font-size: 15px; font-weight: 700; }
+
+.CropHint { margin-top: 4px; font-size: 12px; color: rgba(236, 234, 245, 0.7); }
+
+.CropStage {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.CropViewport {
+    position: relative;
+    overflow: hidden;
+    background-color: #000000;
+    touch-action: none;
+}
+
+.CropViewport.is-circular {
+    width: 280px;
+    height: 280px;
+    border-radius: 50%;
+}
+
+.CropViewport:not(.is-circular) {
+    width: 320px;
+    height: 240px;
+    border-radius: 14px;
+}
+
+.CropImg {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    max-width: none;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+.CropActions {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+    max-width: 320px;
+}
+
+.CadastroMeusSection {
+    margin-top: 4px;
+}
+
+.CadastroMeusHeader {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.CadastroMeusTitle {
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.CadastroMeusContador {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    flex-shrink: 0;
+}
+
+.CadastroMeusVazio {
+    font-size: 13px;
+    color: var(--muted);
+    background-color: var(--paper-tint);
+    border-radius: 14px;
+    padding: 16px;
+    text-align: center;
+    margin-bottom: 14px;
+}
+
+.CadastroMeusList {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.CadastroMeusList[hidden] { display: none; }
+
+/* Card "pesado" — agora que só cabem 3 (LIMITE_PRESTADORES_POR_CONTA),
+   cada cadastro é um recurso escolhido com cuidado, não uma linha
+   descartável; por isso mostra categoria/telefone/horário direto no
+   card, em vez de só o nome como antes. */
+.CadastroMeusCard {
+    padding: 14px 14px 12px;
+    border-radius: 16px;
+    background-color: var(--paper-tint);
+    border: 1px solid var(--border);
+}
+
+.CadastroMeusCardTopo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.CadastroMeusCardNome {
+    font-size: 14.5px;
+    font-weight: 700;
+    color: var(--ink-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.CadastroMeusCardCategoria {
+    margin-top: 2px;
+    font-size: 12.5px;
+    color: var(--muted);
+}
+
+.CadastroMeusCardTelefone {
+    margin-top: 6px;
+    font-size: 12.5px;
+    color: var(--ink-text);
+}
+
+.CadastroMeusCardStatus {
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.CadastroMeusCardAcoes {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.CadastroMeusCardEditar,
+.CadastroMeusCardRemover {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    height: 28px;
+    padding: 0 10px;
+    border: none;
+    border-radius: 999px;
+    background-color: var(--paper);
+    color: var(--muted);
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.CadastroMeusCardEditar svg,
+.CadastroMeusCardRemover svg { width: 13px; height: 13px; }
+
+.CadastroMeusCardEditar:active,
+.CadastroMeusCardRemover:active { background-color: var(--border); }
+
+.CadastroNovoBtn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 46px;
+    border: 1px dashed var(--border);
+    border-radius: 14px;
+    background: none;
+    color: var(--ink-text);
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.CadastroNovoBtn svg { width: 16px; height: 16px; }
+.CadastroNovoBtn:active { background-color: var(--paper-tint); }
+.CadastroNovoBtn[hidden] { display: none; }
+
+.CadastroFormSection {
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+}
+
+.CadastroFormTitulo {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink-text);
+    margin-bottom: 16px;
+}
+
+.CadastroStepsHeader {
+    margin-bottom: 20px;
+}
+
+.CadastroStepsDots {
+    display: flex;
+    gap: 6px;
+}
+
+.CadastroStepDot {
+    flex: 1;
+    height: 4px;
+    border-radius: 999px;
+    background-color: var(--border);
+    transition: background-color 0.2s ease;
+}
+
+.CadastroStepDot.is-ativo {
+    background-color: var(--gold);
+}
+
+.CadastroStepsLabel {
+    margin-top: 10px;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+/* Os 3 passos convivem no mesmo <form>, alternando hidden (ver
+   irParaPasso em script.js). .CadastroStep define display:flex, o que
+   empataria com o display:none padrão do atributo hidden — mesmo caso
+   já documentado em .ClearSearchBtn[hidden]/.CadastroSuccess[hidden]. */
+.CadastroStep {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.CadastroStep[hidden] { display: none; }
+
+/* Mini-mapa dentro do formulário (ver inicializarMapaCadastro em
+   script.js) — <gmp-map> é injetado dinamicamente aqui dentro. Altura
+   fixa pequena o bastante pra não dominar o formulário, mas dar espaço
+   suficiente pra arrastar o pino com precisão. overflow:hidden pra
+   herdar o border-radius (o <gmp-map> em si não arredonda sozinho). */
+.CadastroMapPicker {
+    position: relative; /* contém o gmp-map abaixo. A regra global de
+                           position:absolute agora vive escopada em
+                           ".MapWrap gmp-map" (não vaza mais pra cá), mas
+                           esse position:relative continua necessário
+                           mesmo assim — é o que ancora o position:absolute
+                           próprio deste mini-mapa (ver regra abaixo). */
+    height: 180px;
+    border-radius: 14px;
+    overflow: hidden;
+    background-color: var(--paper-tint);
+}
+
+.CadastroMapPicker gmp-map {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.CadastroFormAcoes {
+    display: flex;
+    gap: 10px;
+    margin-top: 6px;
+}
+
+.CadastroFormAcoes .CadastroSubmit { flex: 1; margin-top: 0; }
+
+.CadastroCancelarBtn {
+    height: 48px;
+    padding: 0 18px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: none;
+    color: var(--ink-text);
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 14.5px;
+}
+
+.CadastroCancelarBtn:active { background-color: var(--paper-tint); }
+
+/* ==========================================================================
+   MODAL DE CONFIRMAÇÃO — usado hoje pra "remover cadastro?" (ver
+   abrirConfirmarAcao em script.js). Backdrop cobre a tela toda por cima
+   até do overlay de cadastro (z-index mais alto).
+   ========================================================================== */
+.ConfirmOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background-color: rgba(20, 22, 31, 0.5);
+}
+
+.ConfirmModal {
+    width: 100%;
+    max-width: 340px;
+    padding: 20px;
+    border-radius: 20px;
+    background-color: var(--paper);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+}
+
+.ConfirmModalTitle {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink-text);
+}
+
+.ConfirmModalText {
+    margin-top: 8px;
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--muted);
+}
+
+.ConfirmModalActions {
+    margin-top: 18px;
+    display: flex;
+    gap: 10px;
+}
+
+.ConfirmModalBtn {
+    flex: 1;
+    height: 44px;
+    border: none;
+    border-radius: 999px;
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.ConfirmModalBtn--cancelar {
+    background-color: var(--paper-tint);
+    color: var(--ink-text);
+}
+.ConfirmModalBtn--cancelar:active { background-color: var(--border); }
+
+.ConfirmModalBtn--confirmar {
+    background-color: var(--danger);
+    color: #ffffff;
+}
+.ConfirmModalBtn--confirmar:active { opacity: 0.85; }
+
+/* ==========================================================================
+   PAINEL "AVALIAÇÕES PENDENTES"
+   ========================================================================== */
+.AvaliacoesPendentesSection {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+}
+
+.AvaliacoesPendentesHint {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 12px;
+    line-height: 1.5;
+}
+
+.AvaliacoesPendentesList {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.AvaliacaoPendenteItem {
+    padding: 12px 14px;
+    border-radius: 14px;
+    background-color: var(--paper-tint);
+}
+
+.AvaliacaoPendenteHeader {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.AvaliacaoPendenteAutor {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--ink-text);
+}
+
+.AvaliacaoPendentePrazo {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+.AvaliacaoPendenteMeta {
+    margin-top: 2px;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.AvaliacaoPendenteTag {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background-color: var(--paper);
+    color: var(--emerald);
+    font-size: 10.5px;
+    font-weight: 700;
+}
+
+.AvaliacaoPendenteMotivo {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+}
+
+.AvaliacaoPendenteMotivoSelect {
+    width: 100%;
+    height: 40px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background-color: var(--paper);
+    color: var(--ink-text);
+    font-family: var(--font-body);
+    font-size: 13px;
+}
+
+.AvaliacaoPendenteMotivoActions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.AvaliacaoPendenteMotivoConfirmar,
+.AvaliacaoPendenteMotivoCancelar {
+    flex: 1;
+    height: 36px;
+    border: none;
+    border-radius: 999px;
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 12.5px;
+}
+.AvaliacaoPendenteMotivoConfirmar { background-color: var(--danger); color: #ffffff; }
+.AvaliacaoPendenteMotivoCancelar { background-color: var(--paper); color: var(--ink-text); }
+
+.AvaliacaoPendenteActions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+.AvaliacaoPendenteActions button {
+    flex: 1;
+    height: 36px;
+    border: none;
+    border-radius: 999px;
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 12.5px;
+    background-color: var(--paper);
+    color: var(--ink-text);
+}
+
+/* !important pelo mesmo motivo dos outros casos já documentados no
+   arquivo (ex: .Chip.is-active): ".AvaliacaoPendenteActions button" é
+   composto (classe+tag), tem mais especificidade que ".AvaliacaoPendenteAceitar"
+   sozinha, e venceria mesmo vindo antes no arquivo — sem !important o
+   fundo/cor "aceitar" nunca apareceriam. */
+.AvaliacaoPendenteAceitar { background-color: var(--emerald) !important; color: #ffffff !important; }
+
+/* .Page já é position:absolute/inset:0 (ver regra geral mais abaixo);
+   o Perfil precisa rolar quando logado (lista de opções cresce). */
+#page-profile.Page {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* ==========================================================================
+   PÁGINA PERFIL — estado deslogado / logado (simulado, ver script.js)
+   ========================================================================== */
+.ProfileWrap {
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 15vh 24px 40px;
+}
+
+.ProfileLoggedOutIcon {
+    display: block;
+    width: 44px;
+    height: 44px;
+    color: var(--muted);
+    margin: 0 auto 14px;
+}
+
+.ProfileLoggedOutTitle {
+    text-align: center;
+    font-family: var(--font-display);
+    font-size: 19px;
+    font-weight: 600;
+    color: var(--ink-text);
+}
+
+.ProfileLoggedOutText {
+    margin-top: 6px;
+    text-align: center;
+    font-size: 13.5px;
+    color: var(--muted);
+    line-height: 1.5;
+}
+
+/* O GIS (Google Identity Services) renderiza o próprio botão dentro desta
+   div — só centraliza e dá espaço, sem estilizar o botão em si (isso é
+   controlado na chamada google.accounts.id.renderButton, ver script.js). */
+.GoogleSignInWrap {
+    margin-top: 22px;
+    display: flex;
+    justify-content: center;
+}
+
+/* Mensagem de erro de formulário — reaproveitada em qualquer CadastroForm
+   que precise mostrar falha de rede/validação (login, editar perfil). */
+.CadastroErro {
+    padding: 10px 12px;
+    border-radius: 12px;
+    background-color: rgba(var(--danger-rgb), 0.1);
+    color: var(--danger);
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.ProfileLoggedInHeader {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 28px;
+}
+
+.ProfileAvatarBig {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background-color: var(--gold);
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 22px;
+}
+
+.ProfileLoggedInName {
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--ink-text);
+}
+
+.ProfileLoggedInBadge {
+    font-size: 11.5px;
+    color: var(--muted);
+    text-align: center;
+}
+
+.ProfileMenuList {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ProfileMenuItem {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background-color: var(--paper);
+    color: var(--ink-text);
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 14px;
+    text-align: left;
+    transition: background-color 0.15s ease, transform 0.1s ease;
+}
+.ProfileMenuItem:active { transform: scale(0.98); background-color: var(--paper-tint); }
+.ProfileMenuItem svg { width: 20px; height: 20px; color: var(--muted); flex-shrink: 0; }
+/* !important pelo mesmo motivo: ".ProfileMenuItem svg" (classe+tag) tem
+   mais especificidade que ".ProfileMenuItemChevron" sozinha, e fixaria o
+   ícone da seta em 20x20 mesmo com esta regra querendo 16x16. */
+.ProfileMenuItemChevron { margin-left: auto; width: 16px !important; height: 16px !important; }
+
+.ProfileMenuItem--sair { color: var(--muted); font-weight: 600; }
+
+/* ==========================================================================
+   CONFIGURAÇÕES (página Menu) — ver iniciarConfiguracoes() em script.js.
+   Reaproveita os mesmos tokens de cor/tipografia do resto do app.
+   ========================================================================== */
+#page-menu.Page {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.SettingsWrap {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 24px 20px 100px;
+}
+
+.SettingsTitle {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--ink-text);
+    margin-bottom: 20px;
+}
+
+.SettingsSection {
+    margin-bottom: 22px;
+}
+
+.SettingsSectionTitle {
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+}
+
+.SettingsRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    background-color: var(--paper);
+    font-size: 14px;
+    color: var(--ink-text);
+}
+
+.SettingsRow:first-of-type { border-radius: 14px 14px 0 0; }
+.SettingsRow:last-of-type { border-radius: 0 0 14px 14px; }
+.SettingsRow + .SettingsRow { border-top: none; }
+.SettingsSection > .SettingsRow:only-of-type { border-radius: 14px; }
+
+/* Seletor de 3 opções (Dinâmico/Claro/Escuro) — mesma pílula visual do
+   .SettingsRow, mas com "trilho" interno onde o botão ativo ganha destaque
+   sólido, tipo um segmented control nativo. */
+.SettingsSegmented {
+    display: flex;
+    padding: 4px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background-color: var(--paper);
+    gap: 4px;
+}
+
+.SettingsSegmentedOption {
+    flex: 1;
+    padding: 9px 0;
+    border: none;
+    border-radius: 10px;
+    background-color: transparent;
+    color: var(--muted);
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 700;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.SettingsSegmentedOption.is-active {
+    background-color: var(--ink);
+    color: var(--paper);
+}
+
+.SettingsHint {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+    padding: 0 2px;
+}
+
+.SettingsLinkRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 14px;
+    border: 1px solid var(--border);
+    background-color: var(--paper);
+    color: var(--ink-text);
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 600;
+    text-align: left;
+}
+.SettingsLinkRow svg { width: 16px; height: 16px; color: var(--muted); flex-shrink: 0; }
+.SettingsLinkRow:first-of-type { border-radius: 14px 14px 0 0; }
+.SettingsLinkRow:last-of-type { border-radius: 0 0 14px 14px; border-top: none; }
+.SettingsLinkRow:active { background-color: var(--paper-tint); }
+
+.SettingsDangerRow {
+    width: 100%;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background-color: var(--paper);
+    color: var(--danger);
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 700;
+    text-align: center;
+}
+.SettingsDangerRow:active { background-color: var(--paper-tint); }
+
+/* Switch simples on/off — estado visual controlado via classe .is-on
+   (aplicarEstadoToggle em script.js), não só aria-checked. */
+.ToggleSwitch {
+    position: relative;
+    width: 44px;
+    height: 26px;
+    flex-shrink: 0;
+    border: none;
+    border-radius: 999px;
+    background-color: var(--border);
+    transition: background-color 0.15s ease;
+}
+
+.ToggleSwitch.is-on {
+    background-color: var(--emerald);
+}
+
+.ToggleSwitchKnob {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: var(--paper);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    transition: transform 0.15s ease;
+}
+
+.ToggleSwitch.is-on .ToggleSwitchKnob {
+    transform: translateX(18px);
+}
+
+/*///////////////////// Controles flutuantes do mapa  ///////////////////////*/
+/* Agrupador vertical: botão de camadas em cima, recentralizar embaixo.
+   Ambos usam o preset .CircleBtn.CircleBtn--md.ThemedControl (ver HTML) —
+   o tema claro/escuro é automático e acompanha .theme-vector, alternada
+   via JS junto com .FindIcon (mesmo grupo .ThemedControl). O RecenterButton
+   soma o modificador .CircleBtn--accent pra manter o azul de ação sempre
+   visível, independente do tema. */
+.MapControls {
+    position: absolute;
+    right: 16px;
+    bottom: 16px;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+/* estado momentâneo enquanto centraliza, disparado via JS (classe .is-centering) */
+.RecenterButton.is-centering {
+    color: var(--ink) !important;
+    background-color: var(--gold) !important;
+}
+
+/* ==========================================================================
+   RAIO DE BUSCA — botão "km" + painel de opções (ver script.js:
+   abrirPainelRaio/fecharPainelRaio/aplicarRaioMaximo). O wrapper
+   .RadiusControl existe só pra dar um ponto de referência (position:
+   relative) pro painel se ancorar sem depender da ordem dos outros
+   botões dentro de .MapControls.
+   ========================================================================== */
+.RadiusControl {
+    position: relative;
+}
+
+.RadiusToggle {
+    position: relative;
+}
+
+.RadiusToggleLabel {
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+}
+
+/* Badge com o valor ativo (ex: "5"), some quando "Sem limite" está selecionado */
+.RadiusToggleBadge {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 3px;
+    border-radius: 999px;
+    background-color: var(--gold);
+    color: var(--ink);
+    font-size: 9.5px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 0 2px var(--paper);
+}
+
+.RadiusPanel {
+    position: absolute;
+    right: calc(100% + 12px);
+    top: 10%;
+    transform: translateY(-50%);
+    width: 168px;
+    padding: 12px;
+    border-radius: 16px;
+    background-color: var(--paper);
+    box-shadow: var(--shadow-float);
+    animation: radius-panel-entrar 0.15s ease;
+}
+
+/* Não reaproveita perfil-entrar de propósito: aquela anima translateY(12px)
+   → translateY(0), o que sobrescreveria o translateY(-50%) usado aqui só
+   pra centralizar verticalmente (mesma propriedade, "transform", não dá
+   pra somar as duas coisas fora de uma única keyframe). Essa aqui já
+   embute o -50% em todos os frames, então a centralização nunca se perde. */
+@keyframes radius-panel-entrar {
+    from { opacity: 0; transform: translateY(-50%) scale(0.94); }
+    to { opacity: 1; transform: translateY(-50%) scale(1); }
+}
+
+.RadiusPanelTitle {
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+}
+
+.RadiusPanelOptions {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.RadiusPanelOption {
+    padding: 9px 10px;
+    border: none;
+    border-radius: 10px;
+    background-color: transparent;
+    color: var(--ink-text);
+    font-family: var(--font-body);
+    font-size: 13.5px;
+    font-weight: 600;
+    text-align: left;
+}
+.RadiusPanelOption:active { background-color: var(--paper-tint); }
+.RadiusPanelOption.is-active {
+    background-color: var(--ink);
+    color: var(--paper);
+    font-weight: 700;
+}
+
+@media (max-width: 600px) {
+    .RadiusPanel {
+        right: calc(100% + 1.4vh);
+    }
+}
+
+@media (max-width: 600px) {
+    .MapControls {
+        right: 1.85vh;
+        bottom: 10.7vh;
+        gap: 1.4vh;
+    }
+    .MapControls .CircleBtn {
+        width: 5.6vh;
+        height: 5.6vh;
+    }
+}
+/*///////////////////////////////////////////////////////////*/
+
+@media (max-width: 600px) {
+    header{ padding: 10px 12px; }
+    /* dá espaço nas bordas pros botões absolutos não colidirem com a busca */
+    .SearchWrap {
+        max-width: none;
+        width: calc(100% - 7dvh);
+        margin: 0 auto;
+    }
+    .SearchRow { gap: 6px; }
+    .MapFind {
+        height: 50px;
+        padding: 0 14px;
+        font-size: 14px;
+    }
+    .FindIcon {
+        --circle-size: 50px;
+    }
+    .Dock button .NavIcon {
+        width: 3.4vh;
+        height: 3.4vh;
+    }
+    .Dock button {
+        width: 5.6vh;
+        height: 5.6vh;
+    }
+
+    /* Chips de categoria: fora-a-fora no mobile, ignorando o padding do
+       header (10px 12px) e o respiro extra que o .SearchWrap ganha dos
+       lados pra caber a busca (7dvh divididos nos dois lados = 3.5dvh
+       cada). A margem negativa cancela exatamente essas duas distâncias,
+       então a fila de chips encosta na borda real da tela — o padding
+       interno (compensado no width) evita que o primeiro/último chip
+       fique colado no vidro do aparelho. Só entra nesse breakpoint por
+       ser um pedido específico de mobile; no desktop o ChipsRow continua
+       contido dentro do .SearchWrap normalmente. */
+    .ChipsRow {
+        --bleed: calc(12px + 3.5dvh);
+        width: calc(100% + 2 * var(--bleed));
+        margin-left: calc(-1 * var(--bleed));
+        margin-right: calc(-1 * var(--bleed));
+        padding: 1px 12px 3px;
+    }
+}
+
+@media (max-width: 360px) {
+    /* telas bem pequenas: some com o botão de busca separado, Enter já envia o form */
+    .FindIcon{ display: none; }
+    .SearchWrap{ width: calc(100% - 96px); }
+}
+
+                    .MapPopup {
+                        position: absolute;
+                        transform: translate(-50%, calc(-100% - 46px));
+                        width: 270px;
+                        background-color: var(--paper, #ffffff);
+                        border-radius: 20px;
+                        padding: 0;
+                        box-shadow: var(--shadow-card, 0 10px 30px rgba(10,11,20,0.14), 0 2px 8px rgba(10,11,20,0.08));
+                        z-index: 20;
+                        cursor: default;
+                        font-family: var(--font-body, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif);
+                        box-sizing: border-box;
+                    }
+                    .MapPopup *{ box-sizing: border-box;}
+                    .MapPopupPhoto {
+                        display: block;
+                        width: 100%;
+                        height: 130px;
+                        object-fit: cover;
+                        background-color: var(--placeholder-bg, #e4e4e7);
+                        border-radius: 20px 20px 0 0;
+                    }
+                    .MapPopupBody {
+                        position: relative;
+                        padding: 14px 16px 16px;
+                    }
+                    .MapPopupClose {
+                        position: absolute;
+                        top: 10px;
+                        right: 10px;
+                        width: 26px;
+                        height: 26px;
+                        border: none;
+                        border-radius: 50%;
+                        background-color: var(--ink, #14161f);
+                        color: var(--icon-on-dark, #eceaf5);
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        cursor: pointer;
+                        padding: 0;
+                        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+                        transition: background-color 0.15s ease, color 0.15s ease;
+                    }
+                    .MapPopupClose:hover { background-color: var(--ink-2, #1e2130); color: var(--gold-soft, #f0c879); }
+                    .MapPopupClose svg { width: 16px; height: 16px; }
+                    .MapPopupHeader {
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                        padding-right: 24px;
+                        margin: 0;
+                    }
+                    .MapPopupAvatar {
+                        flex-shrink: 0;
+                        width: 38px;
+                        height: 38px;
+                        border-radius: 50%;
+                        overflow: hidden;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: #ffffff;
+                        font-weight: 600;
+                        font-size: 15px;
+                    }
+                    .MapPopupName {
+                        font-family: var(--font-display, Georgia, serif);
+                        font-size: 17px;
+                        font-weight: 600;
+                        color: var(--ink-text, #14161f);
+                        line-height: 1.3;
+                    }
+                    .MapPopupCategory { font-size: 13px; color: var(--muted, #6b6f7a); }
+                    .MapPopupRating { margin-top: 10px; font-size: 13px; font-weight: 700; color: var(--gold, #d9a441); }
+                    .MapPopupRating span { color: var(--muted, #6b6f7a); font-weight: 500; }
+                    .MapPopupRating.is-empty { color: var(--muted, #6b6f7a); font-weight: 500; }
+                    .MapPopupStatusRow { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+                    .MapPopupWhatsapp {
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        gap: 8px;
+                        width: 100%;
+                        margin-top: 12px;
+                        padding: 10px 14px;
+                        border: none;
+                        border-radius: 999px;
+                        background-color: var(--emerald, #1c7a5e);
+                        color: #ffffff;
+                        font-family: inherit;
+                        font-weight: 700;
+                        font-size: 12.5px;
+                        text-decoration: none;
+                        box-shadow: 0 2px 8px rgba(28, 122, 94, 0.35);
+                        transition: background-color 0.15s ease, transform 0.1s ease;
+                    }
+                    .MapPopupWhatsapp:active {
+                        transform: scale(0.97);
+                        background-color: #175f4a;
+                    }
+                    .MapPopupWhatsappIcon {
+                        width: 16px;
+                        height: 16px;
+                        flex-shrink: 0;
+                    }
+                    .MapPopupVerPerfil {
+                        display: block;
+                        width: 100%;
+                        margin-top: 8px;
+                        padding: 9px 14px;
+                        border: none;
+                        border-radius: 999px;
+                        background-color: transparent;
+                        color: var(--ink-text, #14161f);
+                        font-family: inherit;
+                        font-weight: 700;
+                        font-size: 13px;
+                        text-align: center;
+                        transition: background-color 0.15s ease;
+                    }
+                    .MapPopupVerPerfil:active { background-color: #f2efe8; }
