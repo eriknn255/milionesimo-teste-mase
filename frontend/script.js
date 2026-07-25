@@ -343,7 +343,7 @@ async function removerPrestadorCadastrado(id) {
    Ajuste aqui quando o backend for pra produção (hoje aponta pro servidor
    local rodando via `npm run dev`, ver backend/README.md).
    ========================================================================== */
-const API_BASE = "https://mase-backend-phi.vercel.app/api";
+const API_BASE = "https://mase-ec2.ruexinternet.com/api";
 
 // Domínio público do Vercel Blob store — é pra onde o backend sobe as
 // fotos de prestador agora (ver subirImagem em routes/prestadores.js),
