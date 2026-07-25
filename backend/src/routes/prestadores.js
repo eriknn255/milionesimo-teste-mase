@@ -28,6 +28,17 @@ const router = express.Router();
 // ==========================================================================
 const LIMITE_PRESTADORES_POR_CONTA = 3;
 
+// diasSemana vem do front como array de números 0-6 (0=domingo...6=sábado,
+// igual Date.getDay()). Filtra qualquer lixo (string, fora de faixa,
+// duplicata) e cai em "todos os dias" se sobrar vazio ou não vier nada —
+// mesmo fallback que "sem horário = sempre aberto" já usava, estendido
+// pra dia da semana.
+function normalizarDiasSemana(diasSemana) {
+    if (!Array.isArray(diasSemana)) return [0, 1, 2, 3, 4, 5, 6];
+    const validos = [...new Set(diasSemana.filter(d => Number.isInteger(d) && d >= 0 && d <= 6))];
+    return validos.length > 0 ? validos : [0, 1, 2, 3, 4, 5, 6];
+}
+
 function digitosTelefone(telefone) {
     return String(telefone || "").replace(/\D/g, "");
 }
@@ -81,6 +92,7 @@ router.get("/:id", (req, res) => {
 router.post("/", exigirUsuario, (req, res) => {
     const nome = sanitizarTexto(req.body.nome, 80);
     const categoria = sanitizarTexto(req.body.categoria, 60);
+    const descricao = sanitizarTexto(req.body.descricao, 300) || null;
     const telefone = sanitizarTexto(req.body.telefone, 30);
     const cor = sanitizarTexto(req.body.cor, 30) || "#2f6fed";
     const { lat, lng, horarioAbre, horarioFecha } = req.body;
@@ -116,17 +128,18 @@ router.post("/", exigirUsuario, (req, res) => {
 
     const prestador = {
         id: uuidv4(),
-        nome, categoria, telefone, cor, lat, lng,
+        nome, categoria, descricao, telefone, cor, lat, lng,
         horario_abre: typeof horarioAbre === "number" ? horarioAbre : null,
         horario_fecha: typeof horarioFecha === "number" ? horarioFecha : null,
+        dias_semana: JSON.stringify(normalizarDiasSemana(req.body.diasSemana)),
         tags: JSON.stringify(tags),
         dono_usuario_id: req.usuario.id,
         criado_em: Date.now()
     };
 
     db.prepare(`
-        INSERT INTO prestadores (id, nome, categoria, telefone, cor, lat, lng, horario_abre, horario_fecha, tags, dono_usuario_id, criado_em)
-        VALUES (@id, @nome, @categoria, @telefone, @cor, @lat, @lng, @horario_abre, @horario_fecha, @tags, @dono_usuario_id, @criado_em)
+        INSERT INTO prestadores (id, nome, categoria, descricao, telefone, cor, lat, lng, horario_abre, horario_fecha, dias_semana, tags, dono_usuario_id, criado_em)
+        VALUES (@id, @nome, @categoria, @descricao, @telefone, @cor, @lat, @lng, @horario_abre, @horario_fecha, @dias_semana, @tags, @dono_usuario_id, @criado_em)
     `).run(prestador);
 
     const linha = db.prepare(`${SELECT_PRESTADORES_COM_NOTA} WHERE p.id = ? GROUP BY p.id`).get(prestador.id);
@@ -160,11 +173,15 @@ router.patch("/:id", exigirUsuario, exigirDono, (req, res) => {
 
     const nome = req.body.nome !== undefined ? sanitizarTexto(req.body.nome, 80) : atual.nome;
     const categoria = req.body.categoria !== undefined ? sanitizarTexto(req.body.categoria, 60) : atual.categoria;
+    const descricao = req.body.descricao !== undefined ? (sanitizarTexto(req.body.descricao, 300) || null) : atual.descricao;
     const telefone = req.body.telefone !== undefined ? sanitizarTexto(req.body.telefone, 30) : atual.telefone;
     const lat = typeof req.body.lat === "number" ? req.body.lat : atual.lat;
     const lng = typeof req.body.lng === "number" ? req.body.lng : atual.lng;
     const horarioAbre = typeof req.body.horarioAbre === "number" ? req.body.horarioAbre : atual.horario_abre;
     const horarioFecha = typeof req.body.horarioFecha === "number" ? req.body.horarioFecha : atual.horario_fecha;
+    const diasSemana = req.body.diasSemana !== undefined
+        ? normalizarDiasSemana(req.body.diasSemana)
+        : (atual.dias_semana ? JSON.parse(atual.dias_semana) : [0, 1, 2, 3, 4, 5, 6]);
 
     if (!nome || !categoria || !telefone || typeof lat !== "number" || typeof lng !== "number") {
         return res.status(400).json({ erro: "nome, categoria, telefone, lat e lng são obrigatórios." });
@@ -201,12 +218,13 @@ router.patch("/:id", exigirUsuario, exigirDono, (req, res) => {
 
     db.prepare(`
         UPDATE prestadores
-        SET nome = @nome, categoria = @categoria, telefone = @telefone, lat = @lat, lng = @lng,
-            horario_abre = @horario_abre, horario_fecha = @horario_fecha, tags = @tags
+        SET nome = @nome, categoria = @categoria, descricao = @descricao, telefone = @telefone, lat = @lat, lng = @lng,
+            horario_abre = @horario_abre, horario_fecha = @horario_fecha, dias_semana = @dias_semana, tags = @tags
         WHERE id = @id
     `).run({
-        id: req.params.id, nome, categoria, telefone, lat, lng,
+        id: req.params.id, nome, categoria, descricao, telefone, lat, lng,
         horario_abre: horarioAbre, horario_fecha: horarioFecha,
+        dias_semana: JSON.stringify(diasSemana),
         tags: JSON.stringify(tags)
     });
 

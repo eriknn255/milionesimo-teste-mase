@@ -28,12 +28,14 @@ CREATE TABLE IF NOT EXISTS prestadores (
     id TEXT PRIMARY KEY,
     nome TEXT NOT NULL,
     categoria TEXT NOT NULL,
+    descricao TEXT,                  -- texto livre opcional, exibido na seção "Sobre" do perfil público
     telefone TEXT NOT NULL,
     cor TEXT NOT NULL,
     lat REAL NOT NULL,
     lng REAL NOT NULL,
     horario_abre REAL,
     horario_fecha REAL,
+    dias_semana TEXT,                -- JSON.stringify([0..6]) — 0=domingo...6=sábado; NULL = todos os dias
     tags TEXT NOT NULL,              -- JSON.stringify(array) — mesma forma que o front já usa
     dono_usuario_id TEXT,            -- quem cadastrou; NULL nos 6 demos (não têm dono real)
     criado_em INTEGER NOT NULL,

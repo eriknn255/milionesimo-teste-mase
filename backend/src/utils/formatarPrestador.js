@@ -21,12 +21,17 @@ function formatarPrestador(linha) {
         id: linha.id,
         nome: linha.nome,
         categoria: linha.categoria,
+        descricao: linha.descricao || null,
         telefone: linha.telefone,
         cor: linha.cor,
         lat: linha.lat,
         lng: linha.lng,
         tags: JSON.parse(linha.tags),
-        horario: { abre: linha.horario_abre, fecha: linha.horario_fecha },
+        horario: {
+            abre: linha.horario_abre,
+            fecha: linha.horario_fecha,
+            dias: linha.dias_semana ? JSON.parse(linha.dias_semana) : [0, 1, 2, 3, 4, 5, 6]
+        },
         donoUsuarioId: linha.dono_usuario_id || null,
         nota: {
             quantidade: linha.avaliacoes_quantidade || 0,
