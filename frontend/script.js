@@ -16,9 +16,28 @@ console.log("[maps.js] versão carregada: cone-svg-v2");
    dado de fuso próprio, assume-se o mesmo fuso de quem está usando o app.
    Prestador sem campo "horario" é tratado como sempre aberto (fallback).
    ========================================================================== */
+const NOMES_DIAS_ABREV = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+// Opções do seletor de horário customizado do cadastro (ver TimePickerField
+// em abrirCadastroPrestador) — substitui o <input type="time"> nativo, cujo
+// picker varia demais de aparência entre navegadores/SOs. Incrementos de
+// 30min (48 opções) cobrem o uso real de horário comercial sem virar uma
+// lista longa demais pra rolar.
+const HORARIOS_OPCOES = Array.from({ length: 48 }, (_, i) => {
+    const h = String(Math.floor(i / 2)).padStart(2, "0");
+    const m = i % 2 === 0 ? "00" : "30";
+    return `${h}:${m}`;
+});
+
+// prestador.horario.dias é um array de índices (0=domingo...6=sábado, igual
+// Date.getDay()) — undefined/ausente é tratado como "todos os dias", pra
+// prestador cadastrado antes desse campo existir continuar se comportando
+// como sempre (sem regressão nos 6 demos e em quem já tinha cadastro).
 function estaAberto(prestador) {
     if (!prestador.horario) return true;
     const agora = new Date();
+    const dias = prestador.horario.dias;
+    if (Array.isArray(dias) && dias.length > 0 && !dias.includes(agora.getDay())) return false;
     const horaAtual = agora.getHours() + agora.getMinutes() / 60;
     const { abre, fecha } = prestador.horario;
     // suporta virada de dia (ex: abre 22, fecha 6 → aberto durante a madrugada)
@@ -26,6 +45,17 @@ function estaAberto(prestador) {
         return horaAtual >= abre && horaAtual < fecha;
     }
     return horaAtual >= abre || horaAtual < fecha;
+}
+
+// "Todos os dias", "Seg–Sex" (intervalo contíguo) ou "Seg, Qua, Sex" (dias
+// avulsos) — mesma lógica visual que qualquer agenda usa pra não escrever
+// "Dom, Seg, Ter, Qua, Qui, Sex, Sáb" por extenso quando é só "todo dia".
+function textoDiasSemana(dias) {
+    if (!Array.isArray(dias) || dias.length === 0 || dias.length === 7) return "Todos os dias";
+    const ordenados = [...dias].sort((a, b) => a - b);
+    const contiguo = ordenados.length > 1 && ordenados.every((d, i) => i === 0 || d === ordenados[i - 1] + 1);
+    if (contiguo) return `${NOMES_DIAS_ABREV[ordenados[0]]}–${NOMES_DIAS_ABREV[ordenados[ordenados.length - 1]]}`;
+    return ordenados.map(d => NOMES_DIAS_ABREV[d]).join(", ");
 }
 
 function formatarHora(horaDecimal) {
@@ -36,8 +66,9 @@ function formatarHora(horaDecimal) {
 
 function horarioTextoPrestador(prestador) {
     if (!prestador.horario) return "";
-    if (prestador.horario.abre === 0 && prestador.horario.fecha === 24) return "Aberto 24h";
-    return `${formatarHora(prestador.horario.abre)} – ${formatarHora(prestador.horario.fecha)}`;
+    const diasTexto = textoDiasSemana(prestador.horario.dias);
+    if (prestador.horario.abre === 0 && prestador.horario.fecha === 24) return `${diasTexto} · Aberto 24h`;
+    return `${diasTexto} · ${formatarHora(prestador.horario.abre)} – ${formatarHora(prestador.horario.fecha)}`;
 }
 
 /* Badge reaproveitado no popup do mapa, no perfil e na lista de resultados.
@@ -59,7 +90,7 @@ function badgeHorarioHTML(prestador) {
    ========================================================================== */
 const CATEGORIAS_CHIPS = [
     { label: "Todos", query: "/all" },
-    { label: "Aberto agora", query: "/aberto" },
+    { label: "Aberto agora", filtro: "aberto" },
     { label: "Mecânico", query: "mecânico" },
     { label: "Borracheiro", query: "borracheiro" },
     { label: "Eletricista", query: "eletricista" },
@@ -68,12 +99,13 @@ const CATEGORIAS_CHIPS = [
     { label: "Programador", query: "programador" }
 ];
 
-// Query especial: "/aberto" não é um texto de busca normal, é resolvida à
-// parte em buscarPrestadores() checando estaAberto(prestador) em vez de
-// comparar contra nome/categoria/tags (igual "/all" já fazia via tag, mas
-// "aberto agora" muda com o relógio, não dá pra guardar como tag fixa).
-const QUERY_ABERTO_AGORA = "/aberto";
-
+// "Aberto agora" não é mais resolvido escrevendo "/aberto" na barra de
+// busca (query mágica comparada em buscarPrestadores) — isso fazia o campo
+// de busca mostrar um texto que o usuário nunca digitou, e impedia
+// combinar esse filtro com uma busca de verdade ("mecânico" + "aberto
+// agora" ao mesmo tempo, por exemplo). Agora é uma variável de estado
+// própria (filtroAbertoAgora, ver perto de chipAtivo), independente do
+// texto da busca — combina com qualquer busca/categoria ativa.
 const QUERIES_SUGESTAO_VAZIO = ["mecânico", "eletricista", "borracheiro"];
 
 /* Gera os botões do ChipsRow a partir de CATEGORIAS_CHIPS. Roda em
@@ -83,7 +115,9 @@ function renderizarChips() {
     const container = document.getElementById("chipsRow");
     if (!container) return;
     container.innerHTML = CATEGORIAS_CHIPS
-        .map(cat => `<button type="button" class="Chip ThemedControl" data-query="${cat.query}">${cat.label}</button>`)
+        .map(cat => cat.filtro
+            ? `<button type="button" class="Chip ThemedControl" data-filtro="${cat.filtro}">${cat.label}</button>`
+            : `<button type="button" class="Chip ThemedControl" data-query="${cat.query}">${cat.label}</button>`)
         .join("");
 }
 
@@ -266,13 +300,15 @@ async function salvarPrestadorCadastrado(dados, posicao = posicaoParaCadastro())
     const corpo = {
         nome: dados.nome,
         categoria: dados.categoria,
+        descricao: dados.descricao || "",
         telefone: dados.telefone,
         tagsTexto: dados.tags, // texto cru "fiação, curto, instalação" — o backend que separa e normaliza
         cor: PALETA_CORES_CADASTRO[Math.floor(Math.random() * PALETA_CORES_CADASTRO.length)],
         lat: posicao.lat,
         lng: posicao.lng,
         horarioAbre: horaParaDecimal(dados.horarioAbre),
-        horarioFecha: horaParaDecimal(dados.horarioFecha)
+        horarioFecha: horaParaDecimal(dados.horarioFecha),
+        diasSemana: dados.diasSemana
     };
 
     const resp = await fetch(`${API_BASE}/prestadores`, {
@@ -298,12 +334,14 @@ async function atualizarPrestadorCadastrado(id, dados, posicao = posicaoParaCada
     const corpo = {
         nome: dados.nome,
         categoria: dados.categoria,
+        descricao: dados.descricao || "",
         telefone: dados.telefone,
         tagsTexto: dados.tags,
         lat: posicao.lat,
         lng: posicao.lng,
         horarioAbre: horaParaDecimal(dados.horarioAbre),
-        horarioFecha: horaParaDecimal(dados.horarioFecha)
+        horarioFecha: horaParaDecimal(dados.horarioFecha),
+        diasSemana: dados.diasSemana
     };
 
     const resp = await fetch(`${API_BASE}/prestadores/${id}`, {
@@ -343,7 +381,7 @@ async function removerPrestadorCadastrado(id) {
    Ajuste aqui quando o backend for pra produção (hoje aponta pro servidor
    local rodando via `npm run dev`, ver backend/README.md).
    ========================================================================== */
-const API_BASE = "https://mase-ec2.ruexinternet.com/api";
+const API_BASE = "http://localhost:3000/api";
 
 // Mesma origem do backend, sem o "/api" — usada pra montar URL de imagem
 // estática servida por ele (ver fotoPerfilPrestador etc.). Caminho
@@ -388,6 +426,7 @@ function mapearPrestadorDoBackend(p) {
         id: p.id,
         nome: p.nome,
         categoria: p.categoria,
+        descricao: p.descricao,
         telefone: p.telefone,
         cor: p.cor,
         lat: p.lat,
@@ -711,7 +750,7 @@ function abrirEditarPerfil() {
             </label>
             <div class="CadastroHint">O e-mail (${perfilUsuarioCache.email || "—"}) não pode ser trocado por aqui — é ele quem identifica sua conta, direto da sua conta Google.</div>
             <div class="CadastroErro" id="editarPerfilErro" hidden></div>
-            <button type="submit" class="CadastroSubmit">Salvar</button>
+            <button type="submit" class="CadastroSubmit">Finalizar</button>
         </form>
     `);
 
@@ -1551,6 +1590,13 @@ function abrirCadastroPrestador() {
                                 <span class="CadastroLabel">Categoria / serviço</span>
                                 <input type="text" name="categoria" class="CadastroInput" placeholder="Ex: Eletricista, Mecânico..." required>
                             </label>
+
+                            <label class="CadastroField">
+                                <span class="CadastroLabel">Descrição (opcional)</span>
+                                <textarea name="descricao" class="CadastroInput CadastroTextarea" rows="4" maxlength="300"
+                                    placeholder="Conte um pouco sobre seu trabalho, experiência ou diferenciais..."></textarea>
+                            </label>
+                            <div class="CadastroHint">Aparece na seção "Sobre" do seu perfil público — ajuda quem está decidindo se vai te chamar.</div>
                         </div>
 
                         <div class="CadastroStep" data-passo="2" hidden>
@@ -1567,15 +1613,54 @@ function abrirCadastroPrestador() {
 
                         <div class="CadastroStep" data-passo="3" hidden>
                             <div class="CadastroFieldRow">
-                                <label class="CadastroField">
+                                <div class="CadastroField">
                                     <span class="CadastroLabel">Abre às</span>
-                                    <input type="time" name="horarioAbre" class="CadastroInput" value="08:00" required>
-                                </label>
-                                <label class="CadastroField">
+                                    <div class="TimePickerField" data-campo="horarioAbre">
+                                        <button type="button" class="TimePickerBtn" aria-haspopup="true" aria-expanded="false">
+                                            <span class="TimePickerBtnValor">08:00</span>
+                                            <svg class="TimePickerBtnChevron" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+                                            </svg>
+                                        </button>
+                                        <input type="hidden" name="horarioAbre" value="08:00">
+                                        <div class="TimePickerPanel" hidden>
+                                            <div class="TimePickerPanelOptions">
+                                                ${HORARIOS_OPCOES.map(h => `
+                                                    <button type="button" class="TimePickerOption${h === "08:00" ? " is-active" : ""}" data-valor="${h}">${h}</button>
+                                                `).join("")}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="CadastroField">
                                     <span class="CadastroLabel">Fecha às</span>
-                                    <input type="time" name="horarioFecha" class="CadastroInput" value="18:00" required>
-                                </label>
+                                    <div class="TimePickerField" data-campo="horarioFecha">
+                                        <button type="button" class="TimePickerBtn" aria-haspopup="true" aria-expanded="false">
+                                            <span class="TimePickerBtnValor">18:00</span>
+                                            <svg class="TimePickerBtnChevron" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+                                            </svg>
+                                        </button>
+                                        <input type="hidden" name="horarioFecha" value="18:00">
+                                        <div class="TimePickerPanel" hidden>
+                                            <div class="TimePickerPanelOptions">
+                                                ${HORARIOS_OPCOES.map(h => `
+                                                    <button type="button" class="TimePickerOption${h === "18:00" ? " is-active" : ""}" data-valor="${h}">${h}</button>
+                                                `).join("")}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
+
+                            <label class="CadastroField">
+                                <span class="CadastroLabel">Dias de funcionamento</span>
+                                <div class="CadastroDiasRow" id="cadastroDiasRow">
+                                    ${NOMES_DIAS_ABREV.map((nome, i) => `
+                                        <button type="button" class="CadastroDiaChip is-active" data-dia="${i}">${nome}</button>
+                                    `).join("")}
+                                </div>
+                            </label>
 
                             <label class="CadastroField">
                                 <span class="CadastroLabel">Localização no mapa</span>
@@ -1678,7 +1763,9 @@ function abrirCadastroPrestador() {
 
     overlay.querySelector(".CadastroOverlayClose").addEventListener("click", () => fecharCadastroPrestador());
 
+    const meusSection = overlay.querySelector("#cadastroMeusSection");
     const formSection = overlay.querySelector("#cadastroFormSection");
+    const diasRow = overlay.querySelector("#cadastroDiasRow");
     const formTitulo = overlay.querySelector("#cadastroFormTitulo");
     const novoBtn = overlay.querySelector("#cadastroNovoBtn");
     const form = overlay.querySelector("#cadastroForm");
@@ -1703,6 +1790,97 @@ function abrirCadastroPrestador() {
     // mandar as fotos.
     let prestadorEmEdicao = null;
 
+    // Dias em que o prestador funciona — fora do FormData de propósito,
+    // igual as fotos (passo 4): são botões de toggle, não <input>, então
+    // não entram sozinhos em new FormData(form). Todos ativos por padrão
+    // (mesmo espírito do "sem horário = sempre aberto" que já existia:
+    // aqui, "sem restrição de dia" = todo dia).
+    let diasSelecionados = new Set([0, 1, 2, 3, 4, 5, 6]);
+
+    function atualizarChipsDias() {
+        diasRow.querySelectorAll(".CadastroDiaChip").forEach(chip => {
+            chip.classList.toggle("is-active", diasSelecionados.has(Number(chip.dataset.dia)));
+        });
+    }
+
+    diasRow.querySelectorAll(".CadastroDiaChip").forEach(chip => {
+        chip.addEventListener("click", () => {
+            const dia = Number(chip.dataset.dia);
+            // Não deixa desmarcar o último dia ativo — prestador sem
+            // nenhum dia selecionado é um estado sem sentido (nunca
+            // aparece como aberto pra ninguém, e some da badge sem avisar
+            // por quê). Pelo menos um dia sempre fica marcado.
+            if (diasSelecionados.has(dia) && diasSelecionados.size === 1) return;
+            diasSelecionados.has(dia) ? diasSelecionados.delete(dia) : diasSelecionados.add(dia);
+            atualizarChipsDias();
+        });
+    });
+
+    /* ==========================================================================
+       SELETOR DE HORÁRIO CUSTOMIZADO ("Abre às" / "Fecha às")
+       Substitui o <input type="time"> nativo — o picker dele varia demais
+       de aparência entre navegador/SO (relógio no Android, roda no iOS) e
+       não segue o visual do resto do app. Mesmo padrão de painel do
+       RadiusPanel (botão + lista de opções), só que dois em paralelo (um
+       por campo) e escopado dentro do form em vez de flutuar sobre o mapa.
+       O valor de verdade continua num <input type="hidden"> com o mesmo
+       name de antes — o resto do código (FormData, preencherFormulario,
+       reset) não precisa saber que o picker mudou por baixo.
+       ========================================================================== */
+    const timePickerFields = [...overlay.querySelectorAll(".TimePickerField")];
+
+    function fecharTimePickers() {
+        timePickerFields.forEach(campo => {
+            campo.querySelector(".TimePickerPanel").hidden = true;
+            campo.querySelector(".TimePickerBtn").setAttribute("aria-expanded", "false");
+        });
+    }
+
+    // Único ponto que muda um horário de verdade — usado tanto pelo clique
+    // numa opção quanto pelo reset/preenchimento em modo edição, assim o
+    // botão visível (rótulo + opção destacada) nunca fica dessincronizado
+    // do <input hidden> que de fato viaja no FormData.
+    function definirHorario(nomeCampo, valor) {
+        const campo = timePickerFields.find(c => c.dataset.campo === nomeCampo);
+        if (!campo) return;
+        campo.querySelector('input[type="hidden"]').value = valor;
+        campo.querySelector(".TimePickerBtnValor").textContent = valor;
+        campo.querySelectorAll(".TimePickerOption").forEach(opcao => {
+            opcao.classList.toggle("is-active", opcao.dataset.valor === valor);
+        });
+    }
+
+    timePickerFields.forEach(campo => {
+        const botao = campo.querySelector(".TimePickerBtn");
+        const painel = campo.querySelector(".TimePickerPanel");
+
+        botao.addEventListener("click", (event) => {
+            event.stopPropagation();
+            const estavaAberto = !painel.hidden;
+            fecharTimePickers();
+            if (estavaAberto) return;
+            painel.hidden = false;
+            botao.setAttribute("aria-expanded", "true");
+            const ativo = painel.querySelector(".TimePickerOption.is-active");
+            if (ativo) ativo.scrollIntoView({ block: "center" });
+        });
+
+        painel.querySelectorAll(".TimePickerOption").forEach(opcao => {
+            opcao.addEventListener("click", () => {
+                definirHorario(campo.dataset.campo, opcao.dataset.valor);
+                fecharTimePickers();
+            });
+        });
+    });
+
+    // "Clicar fora fecha" escopado ao próprio overlay (em vez de
+    // document) — o overlay some do DOM ao fechar o cadastro, então esse
+    // listener some junto. Um listener em document aqui vazaria um novo
+    // handler morto a cada vez que o cadastro é reaberto.
+    overlay.addEventListener("click", (event) => {
+        if (!event.target.closest(".TimePickerField")) fecharTimePickers();
+    });
+
     // Wizard de 4 passos por tema em vez de um formulário longo de uma vez
     // só — pedir uma coisa de cada vez reduz a sensação de "trabalho" de
     // preencher, e permite validar cada grupo antes de deixar avançar
@@ -1720,7 +1898,7 @@ function abrirCadastroPrestador() {
         stepsLabel.textContent = `Passo ${passo} de ${TOTAL_PASSOS} · ${TITULOS_PASSO[passo]}`;
         voltarBtn.textContent = passo === 1 ? "Cancelar" : "Voltar";
         if (passo <= 2) avancarBtn.textContent = "Próximo";
-        else if (passo === 3) avancarBtn.textContent = prestadorEmEdicao ? "Salvar" : "Cadastrar";
+        else if (passo === 3) avancarBtn.textContent = prestadorEmEdicao ? "Finalizar" : "Cadastrar";
         else avancarBtn.textContent = "Concluir";
         // avancarBtn.type fica sempre "button" de propósito — ver o clique
         // dele mais abaixo. Já tentamos "submit" só no último passo, mas
@@ -1733,9 +1911,6 @@ function abrirCadastroPrestador() {
 
         if (passo === 3) inicializarMapaCadastro(cadastroPontoEscolhido || posicaoParaCadastro());
         if (passo === 4) atualizarFontesFotos();
-
-        const primeiroCampo = stepEls[passo - 1].querySelector("input");
-        if (primeiroCampo) primeiroCampo.focus();
     }
 
     // Mesma regra do backend (validarTelefone em prestadores.js) — só pra
@@ -1778,13 +1953,16 @@ function abrirCadastroPrestador() {
     function preencherFormulario(p) {
         form.querySelector('[name="nome"]').value = p.nome;
         form.querySelector('[name="categoria"]').value = p.categoria;
+        form.querySelector('[name="descricao"]').value = p.descricao || "";
         form.querySelector('[name="telefone"]').value = p.telefone;
         const categoriaNormalizada = normalizar(p.categoria);
         const tagsExtras = (p.tags || []).filter(t => t !== "/all" && t !== categoriaNormalizada);
         form.querySelector('[name="tags"]').value = tagsExtras.join(", ");
         if (p.horario) {
-            form.querySelector('[name="horarioAbre"]').value = formatarHora(p.horario.abre);
-            form.querySelector('[name="horarioFecha"]').value = formatarHora(p.horario.fecha);
+            definirHorario("horarioAbre", formatarHora(p.horario.abre));
+            definirHorario("horarioFecha", formatarHora(p.horario.fecha));
+            diasSelecionados = new Set(Array.isArray(p.horario.dias) && p.horario.dias.length > 0 ? p.horario.dias : [0, 1, 2, 3, 4, 5, 6]);
+            atualizarChipsDias();
         }
         cadastroPontoEscolhido = { lat: p.lat, lng: p.lng };
     }
@@ -1798,8 +1976,10 @@ function abrirCadastroPrestador() {
     function abrirFormulario(prestador = null) {
         resetarPassoFotos();
         form.reset();
-        form.querySelector('[name="horarioAbre"]').value = "08:00";
-        form.querySelector('[name="horarioFecha"]').value = "18:00";
+        definirHorario("horarioAbre", "08:00");
+        definirHorario("horarioFecha", "18:00");
+        diasSelecionados = new Set([0, 1, 2, 3, 4, 5, 6]);
+        atualizarChipsDias();
         cadastroPontoEscolhido = null;
         prestadorEmEdicao = prestador;
         formTitulo.textContent = prestador ? `Editar ${prestador.nome}` : "Cadastrar novo prestador";
@@ -1812,6 +1992,7 @@ function abrirCadastroPrestador() {
             usarAvatarGoogleComoPadrao();
         }
 
+        meusSection.hidden = true;
         formSection.hidden = false;
         sucesso.hidden = true;
         form.hidden = false;
@@ -1820,9 +2001,10 @@ function abrirCadastroPrestador() {
 
     function fecharFormulario() {
         formSection.hidden = true;
+        meusSection.hidden = false;
         form.reset();
-        form.querySelector('[name="horarioAbre"]').value = "08:00";
-        form.querySelector('[name="horarioFecha"]').value = "18:00";
+        definirHorario("horarioAbre", "08:00");
+        definirHorario("horarioFecha", "18:00");
         cadastroPontoEscolhido = null;
         prestadorEmEdicao = null;
         resetarPassoFotos();
@@ -1877,6 +2059,7 @@ function abrirCadastroPrestador() {
 
     async function salvarDadosBasicos() {
         const dados = Object.fromEntries(new FormData(form).entries());
+        dados.diasSemana = [...diasSelecionados];
         erroEl.hidden = true;
         avancarBtn.disabled = true;
         avancarBtn.textContent = prestadorEmEdicao ? "Salvando..." : "Cadastrando...";
@@ -2364,6 +2547,19 @@ function iniciarUI() {
         });
     });
 
+    // "Aberto agora" — chip independente, com sua própria variável
+    // (filtroAbertoAgora) em vez de reaproveitar a barra de busca. Fica
+    // ligado/desligado sozinho e combina com qualquer busca/categoria
+    // ativa no momento, em vez de substituí-la.
+    document.querySelectorAll(".Chip[data-filtro]").forEach(chip => {
+        chip.addEventListener("click", () => {
+            if (!map) return; // Maps ainda não carregou
+            filtroAbertoAgora = !filtroAbertoAgora;
+            chip.classList.toggle("is-active", filtroAbertoAgora);
+            buscarPrestadores(ultimaQueryBuscada || "/all");
+        });
+    });
+
     // Clicar fora da área de busca (fora do campo, dos chips e da própria
     // lista) fecha a lista de resultados — ex: tocar no mapa pra ver os
     // pins sem a lista por cima. Os marcadores continuam plotados, só a
@@ -2435,6 +2631,12 @@ function atualizarVisibilidadeClearBtn() {
 
 // Chip atualmente ativo (classe .is-active) — no máximo um por vez.
 let chipAtivo = null;
+
+// Filtro "Aberto agora" — independente do texto de busca/chip de
+// categoria (ver renderizarChips/buscarPrestadores). true = só mostra
+// quem está aberto neste exato momento, combinado com qualquer busca ou
+// categoria que esteja ativa ao mesmo tempo.
+let filtroAbertoAgora = false;
 
 // Controla o atraso simulado entre "usuário digitou" (ou clicou num chip)
 // e o resultado aparecer — dá tempo do skeleton (placeholder animado)
@@ -2610,21 +2812,54 @@ function fecharPerfilPrestador(viaPopstate) {
     }
 }
 
+// Uma capa que não existe ainda (URL determinística que dá 404 porque o
+// prestador só tem 2 das 4 fotos, por exemplo) não é uma FALHA — é
+// esperado, e não deve virar um slide de placeholder ocupando lugar no
+// rodízio. Por isso o onerror aqui remove o slide de vez em vez de trocar
+// o src pelo placeholder — assim o carrossel só alterna entre fotos que
+// realmente existem. O placeholder só aparece (ver abaixo) se, depois de
+// tentar todas, sobrar zero fotos reais — aí sim é preciso mostrar algo
+// no lugar da capa vazia.
+function removerSlideCapa(img) {
+    const container = img.closest(".ProviderProfileCover");
+    if (!container) return;
+    const eraAtivo = img.classList.contains("is-active");
+    img.remove();
+
+    const restantes = container.querySelectorAll(".ProviderProfileCoverImg");
+    if (restantes.length === 0) {
+        const placeholder = document.createElement("img");
+        placeholder.className = "ProviderProfileCoverImg is-active";
+        placeholder.src = CAPA_PLACEHOLDER;
+        placeholder.alt = "";
+        container.insertBefore(placeholder, container.firstElementChild);
+    } else if (eraAtivo) {
+        restantes[0].classList.add("is-active");
+    }
+}
+
 // Alterna a classe is-active entre os slides da capa a cada 2s. Roda
 // enquanto o perfil estiver aberto — a própria fecharPerfilPrestador()
 // limpa o intervalo, então não fica rodando em segundo plano depois que
 // o overlay já foi removido do DOM.
+//
+// Consulta os slides de novo a cada tick (em vez de guardar uma lista
+// fixa uma vez só) porque removerSlideCapa pode tirar slides do ar a
+// qualquer momento, conforme cada <img> termina de carregar (ou falha)
+// de forma assíncrona — uma lista guardada de antemão ficaria
+// referenciando elementos que já não existem mais no DOM.
 const INTERVALO_ROTACAO_CAPA_MS = 2000;
 
 function iniciarRotacaoCapa(container) {
-    const slides = container.querySelectorAll(".ProviderProfileCoverImg");
-    if (slides.length <= 1) return;
-
-    let indiceAtual = 0;
     perfilCapaIntervalId = setInterval(() => {
-        slides[indiceAtual].classList.remove("is-active");
-        indiceAtual = (indiceAtual + 1) % slides.length;
-        slides[indiceAtual].classList.add("is-active");
+        const slides = [...container.querySelectorAll(".ProviderProfileCoverImg")];
+        if (slides.length <= 1) return;
+
+        const indiceAtivo = slides.findIndex(s => s.classList.contains("is-active"));
+        const atual = indiceAtivo === -1 ? 0 : indiceAtivo;
+        const proximo = (atual + 1) % slides.length;
+        slides[atual].classList.remove("is-active");
+        slides[proximo].classList.add("is-active");
     }, INTERVALO_ROTACAO_CAPA_MS);
 }
 
@@ -2956,7 +3191,7 @@ async function abrirPerfilPrestador(prestador) {
             ${fotosCapaPrestador(prestador.id).map((src, indice) => `
                 <img class="ProviderProfileCoverImg${indice === 0 ? " is-active" : ""}" src="${src}"
                     alt="Foto do local de ${prestador.nome}"
-                    onerror="this.onerror=null; this.src='${CAPA_PLACEHOLDER}';">
+                    onerror="this.onerror=null; removerSlideCapa(this);">
             `).join("")}
             <button type="button" class="ProviderProfileClose" aria-label="Fechar perfil">
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2977,7 +3212,7 @@ async function abrirPerfilPrestador(prestador) {
             <div class="ProviderProfileStatusRow">${badgeHorarioHTML(prestador)}</div>
             <div class="ProviderProfileSection">
                 <div class="ProviderProfileSectionTitle">Sobre</div>
-                <div class="ProviderProfileBio">Atendimento como ${prestador.categoria.toLowerCase()} na região de Teresina. Em breve: fotos de trabalhos anteriores, horários disponíveis e mais avaliações por aqui.</div>
+                <div class="ProviderProfileBio${prestador.descricao ? "" : " is-empty"}">${prestador.descricao || "Este prestador ainda não escreveu uma descrição."}</div>
             </div>
             <div class="ProviderProfileSection">
                 <div class="ProviderProfileSectionTitle">Última avaliação</div>
@@ -3667,10 +3902,8 @@ function buscarPrestadores(query) {
 
     limparMarcadores();
 
-    const filtrandoPorAberto = query === QUERY_ABERTO_AGORA;
-
     const encontrados = PRESTADORES.filter(prestador => {
-        if (filtrandoPorAberto) return estaAberto(prestador);
+        if (filtroAbertoAgora && !estaAberto(prestador)) return false;
 
         const categoriaNorm = normalizar(prestador.categoria);
         const nomeNorm = normalizar(prestador.nome);
