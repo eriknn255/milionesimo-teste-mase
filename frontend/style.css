@@ -14,9 +14,11 @@
     --gold-tint: #fbf3e2;
     --emerald: #1c7a5e;
     --emerald-dark: #175f4a;
+    --green-ok: #00c853e6;
     --muted: #6b6f7a;
     --border: #e8e6e1;
     --soft-blue: #0a72e2;
+    --blue-shadow: #60c0ff20;
     --back-red: #ff000045;
 
     /* vermelho de erro/perigo (formulários, botões destrutivos) — distinto
@@ -56,8 +58,8 @@
     --gold-rgb: 217, 164, 65;
     --emerald-rgb: 28, 122, 94;
 
-    --font-display: "Google Sans", Georgia, serif;
-    --font-body: 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-display: 'Google Sans Flex', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-body: 'Google Sans Flex', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -709,6 +711,18 @@ footer {
 }
 .ProviderProfileCoverImg.is-active { opacity: 1; }
 
+/* Capa em vídeo (exclusiva com o carrossel de fotos acima) — mesmo
+   enquadramento, sempre "ativo" (não há rotação entre slides como nas
+   fotos, então não precisa da transição de opacity). */
+.ProviderProfileCoverVideo {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
 .ProviderProfileClose {
     position: absolute;
     top: 16px;
@@ -820,9 +834,17 @@ footer {
 }
 
 .ProviderProfileBio {
-    font-size: 14px;
+    font-size: 13.2px;
     line-height: 1.6;
+    padding: 0.85vh;
+    border-radius: 1vh;
     color: var(--ink-text);
+    background-color: var(--blue-shadow);
+}
+
+.ProviderProfileBio.is-empty {
+    color: var(--muted);
+    font-style: italic;
 }
 
 .ProviderProfileSection {
@@ -1315,6 +1337,38 @@ footer {
     gap: 12px;
 }
 
+/* Chips de dia da semana (Dom..Sáb) no passo 3 do cadastro — mesma
+   linguagem visual do .Chip do ChipsRow (pílula, ativo em --gold), só
+   menor e num grid que quebra linha em vez de rolar horizontal, já que
+   são sempre os mesmos 7 e cabem melhor quebrando que scrollando. */
+.CadastroDiasRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.85vh;
+}
+
+.CadastroDiaChip {
+    padding: 8px 9px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background-color: var(--paper);
+    color: var(--ink-text);
+    font-family: var(--font-body);
+    font-weight: 400;
+    font-size: 13px;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.CadastroDiaChip:active {
+    transform: scale(0.94);
+}
+
+.CadastroDiaChip.is-active {
+    background-color: var(--gold);
+    border-color: var(--gold);
+    color: var(--ink);
+}
+
 .CadastroLabel {
     font-size: 12.5px;
     font-weight: 700;
@@ -1337,6 +1391,101 @@ footer {
     border-color: var(--gold);
     box-shadow: 0 0 0 3px rgba(var(--gold-rgb), 0.2);
 }
+
+/* ==========================================================================
+   SELETOR DE HORÁRIO CUSTOMIZADO ("Abre às" / "Fecha às" do cadastro)
+   Substitui o <input type="time"> nativo — ver iniciarização em
+   abrirCadastroPrestador (script.js). Botão com a cara de .CadastroInput
+   + painel de opções que abre por baixo, mesmo espírito do .RadiusPanel
+   dos controles do mapa, só posicionado em fluxo normal (dentro do
+   formulário) em vez de flutuando sobre o mapa.
+   ========================================================================== */
+.TimePickerField {
+    position: relative;
+}
+
+.TimePickerBtn {
+    width: 100%;
+    height: 46px;
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background-color: var(--paper);
+    color: var(--ink-text);
+    font-family: var(--font-body);
+    font-size: 14.5px;
+    font-weight: 400;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.TimePickerBtn[aria-expanded="true"] {
+    border-color: var(--gold);
+    box-shadow: 0 0 0 3px rgba(var(--gold-rgb), 0.2);
+}
+
+.TimePickerBtnChevron {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    color: var(--muted);
+    transition: transform 0.15s ease;
+}
+
+.TimePickerBtn[aria-expanded="true"] .TimePickerBtnChevron {
+    transform: rotate(180deg);
+}
+
+.TimePickerPanel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    z-index: 5;
+    padding: 6px;
+    border-radius: 14px;
+    background-color: var(--paper);
+    box-shadow: var(--shadow-float);
+    animation: time-panel-entrar 0.15s ease;
+}
+
+@keyframes time-panel-entrar {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.TimePickerPanelOptions {
+    max-height: 192px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.TimePickerOption {
+    padding: 9px 10px;
+    border: none;
+    border-radius: 10px;
+    background-color: transparent;
+    color: var(--ink-text);
+    font-family: var(--font-body);
+    font-size: 13.5px;
+    font-weight: 600;
+    text-align: left;
+    flex-shrink: 0;
+}
+
+.TimePickerOption:active { background-color: var(--paper-tint); }
+
+.TimePickerOption.is-active {
+    background-color: var(--ink);
+    color: var(--paper);
+    font-weight: 700;
+}
+
+.TimePickerPanel[hidden] { display: none; }
 
 /* textarea reaproveita .CadastroInput (borda, fundo, fonte) — só ajusta o
    que um campo de texto de uma linha não precisa (altura fixa, resize). */
@@ -1505,6 +1654,7 @@ footer {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 10px;
+    padding: 10px;
 }
 
 .FotosPrestadorCapaItem {
@@ -1540,6 +1690,25 @@ footer {
     height: 100%;
     object-fit: cover;
     display: block;
+}
+
+/* Preview do vídeo de capa (só no slot principal) — mesmo enquadramento
+   do <img> acima, pra não pular o layout ao trocar entre foto e vídeo. */
+.FotosPrestadorCapaTileVideo {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+/* Slots 2-4 desativados quando o principal é vídeo (exclusivo, ver
+   entrarModoVideoCapa em 00-script.js). pointer-events:none impede até o
+   toque abrir o seletor de arquivo à toa. */
+.FotosPrestadorCapaItem.is-disabled-video {
+    opacity: 0.35;
+    pointer-events: none;
 }
 
 .FotosPrestadorCapaTileAdd {
@@ -1922,7 +2091,7 @@ footer {
 }
 
 .CadastroStepDot.is-ativo {
-    background-color: var(--gold);
+    background-color: var(--green-ok);
 }
 
 .CadastroStepsLabel {
@@ -2668,7 +2837,7 @@ footer {
                         box-shadow: var(--shadow-card, 0 10px 30px rgba(10,11,20,0.14), 0 2px 8px rgba(10,11,20,0.08));
                         z-index: 20;
                         cursor: default;
-                        font-family: var(--font-body, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif);
+                        font-family: var(--font-body, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
                         box-sizing: border-box;
                     }
                     .MapPopup *{ box-sizing: border-box;}
@@ -2725,7 +2894,7 @@ footer {
                         font-size: 15px;
                     }
                     .MapPopupName {
-                        font-family: var(--font-display, Georgia, serif);
+                        font-family: var(--font-display, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
                         font-size: 17px;
                         font-weight: 600;
                         color: var(--ink-text, #14161f);

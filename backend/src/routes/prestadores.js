@@ -28,6 +28,30 @@ const router = express.Router();
 // ==========================================================================
 const LIMITE_PRESTADORES_POR_CONTA = 3;
 
+// ==========================================================================
+// MIGRAÇÃO LEVE: capa_tipo ("foto" | "video") — distingue se a capa do
+// prestador é o carrossel de até 4 fotos (padrão) ou 1 vídeo único
+// (exclusivos entre si, ver seção FOTOS/VÍDEO DE CAPA mais abaixo).
+// Self-healing (tenta o ALTER, ignora erro de coluna duplicada) pra não
+// depender de um arquivo de migration separado.
+// ==========================================================================
+try {
+    db.exec("ALTER TABLE prestadores ADD COLUMN capa_tipo TEXT NOT NULL DEFAULT 'foto'");
+} catch (erro) {
+    if (!String(erro.message).includes("duplicate column")) throw erro;
+}
+
+// diasSemana vem do front como array de números 0-6 (0=domingo...6=sábado,
+// igual Date.getDay()). Filtra qualquer lixo (string, fora de faixa,
+// duplicata) e cai em "todos os dias" se sobrar vazio ou não vier nada —
+// mesmo fallback que "sem horário = sempre aberto" já usava, estendido
+// pra dia da semana.
+function normalizarDiasSemana(diasSemana) {
+    if (!Array.isArray(diasSemana)) return [0, 1, 2, 3, 4, 5, 6];
+    const validos = [...new Set(diasSemana.filter(d => Number.isInteger(d) && d >= 0 && d <= 6))];
+    return validos.length > 0 ? validos : [0, 1, 2, 3, 4, 5, 6];
+}
+
 function digitosTelefone(telefone) {
     return String(telefone || "").replace(/\D/g, "");
 }
@@ -81,6 +105,7 @@ router.get("/:id", (req, res) => {
 router.post("/", exigirUsuario, (req, res) => {
     const nome = sanitizarTexto(req.body.nome, 80);
     const categoria = sanitizarTexto(req.body.categoria, 60);
+    const descricao = sanitizarTexto(req.body.descricao, 460) || null;
     const telefone = sanitizarTexto(req.body.telefone, 30);
     const cor = sanitizarTexto(req.body.cor, 30) || "#2f6fed";
     const { lat, lng, horarioAbre, horarioFecha } = req.body;
@@ -116,17 +141,18 @@ router.post("/", exigirUsuario, (req, res) => {
 
     const prestador = {
         id: uuidv4(),
-        nome, categoria, telefone, cor, lat, lng,
+        nome, categoria, descricao, telefone, cor, lat, lng,
         horario_abre: typeof horarioAbre === "number" ? horarioAbre : null,
         horario_fecha: typeof horarioFecha === "number" ? horarioFecha : null,
+        dias_semana: JSON.stringify(normalizarDiasSemana(req.body.diasSemana)),
         tags: JSON.stringify(tags),
         dono_usuario_id: req.usuario.id,
         criado_em: Date.now()
     };
 
     db.prepare(`
-        INSERT INTO prestadores (id, nome, categoria, telefone, cor, lat, lng, horario_abre, horario_fecha, tags, dono_usuario_id, criado_em)
-        VALUES (@id, @nome, @categoria, @telefone, @cor, @lat, @lng, @horario_abre, @horario_fecha, @tags, @dono_usuario_id, @criado_em)
+        INSERT INTO prestadores (id, nome, categoria, descricao, telefone, cor, lat, lng, horario_abre, horario_fecha, dias_semana, tags, dono_usuario_id, criado_em)
+        VALUES (@id, @nome, @categoria, @descricao, @telefone, @cor, @lat, @lng, @horario_abre, @horario_fecha, @dias_semana, @tags, @dono_usuario_id, @criado_em)
     `).run(prestador);
 
     const linha = db.prepare(`${SELECT_PRESTADORES_COM_NOTA} WHERE p.id = ? GROUP BY p.id`).get(prestador.id);
@@ -160,11 +186,15 @@ router.patch("/:id", exigirUsuario, exigirDono, (req, res) => {
 
     const nome = req.body.nome !== undefined ? sanitizarTexto(req.body.nome, 80) : atual.nome;
     const categoria = req.body.categoria !== undefined ? sanitizarTexto(req.body.categoria, 60) : atual.categoria;
+    const descricao = req.body.descricao !== undefined ? (sanitizarTexto(req.body.descricao, 460) || null) : atual.descricao;
     const telefone = req.body.telefone !== undefined ? sanitizarTexto(req.body.telefone, 30) : atual.telefone;
     const lat = typeof req.body.lat === "number" ? req.body.lat : atual.lat;
     const lng = typeof req.body.lng === "number" ? req.body.lng : atual.lng;
     const horarioAbre = typeof req.body.horarioAbre === "number" ? req.body.horarioAbre : atual.horario_abre;
     const horarioFecha = typeof req.body.horarioFecha === "number" ? req.body.horarioFecha : atual.horario_fecha;
+    const diasSemana = req.body.diasSemana !== undefined
+        ? normalizarDiasSemana(req.body.diasSemana)
+        : (atual.dias_semana ? JSON.parse(atual.dias_semana) : [0, 1, 2, 3, 4, 5, 6]);
 
     if (!nome || !categoria || !telefone || typeof lat !== "number" || typeof lng !== "number") {
         return res.status(400).json({ erro: "nome, categoria, telefone, lat e lng são obrigatórios." });
@@ -201,12 +231,13 @@ router.patch("/:id", exigirUsuario, exigirDono, (req, res) => {
 
     db.prepare(`
         UPDATE prestadores
-        SET nome = @nome, categoria = @categoria, telefone = @telefone, lat = @lat, lng = @lng,
-            horario_abre = @horario_abre, horario_fecha = @horario_fecha, tags = @tags
+        SET nome = @nome, categoria = @categoria, descricao = @descricao, telefone = @telefone, lat = @lat, lng = @lng,
+            horario_abre = @horario_abre, horario_fecha = @horario_fecha, dias_semana = @dias_semana, tags = @tags
         WHERE id = @id
     `).run({
-        id: req.params.id, nome, categoria, telefone, lat, lng,
+        id: req.params.id, nome, categoria, descricao, telefone, lat, lng,
         horario_abre: horarioAbre, horario_fecha: horarioFecha,
+        dias_semana: JSON.stringify(diasSemana),
         tags: JSON.stringify(tags)
     });
 
@@ -224,14 +255,22 @@ function normalizarTag(texto) {
 }
 
 // ==========================================================================
-// FOTOS DO PRESTADOR (perfil + até 4 de capa)
+// FOTOS/VÍDEO DE CAPA DO PRESTADOR (perfil + até 4 de capa, OU 1 vídeo)
 // Diferente da foto de avaliação (avaliacoes.js, nome uuid), essas usam
 // nome DETERMINÍSTICO a partir do id do prestador — o front monta a URL
-// só com o id (fotoPerfilPrestador/fotosCapaPrestador em script.js), sem
-// precisar de coluna nova no banco. Subir de novo simplesmente substitui
-// o arquivo anterior (mesmo nome).
+// só com o id (fotoPerfilPrestador/fotosCapaPrestador/fotoCapaVideoPrestador
+// em script.js), sem precisar de coluna nova no banco pra montar a URL
+// (capa_tipo só diz QUAL das duas usar). Subir de novo simplesmente
+// substitui o arquivo anterior (mesmo nome).
 // Requer duas dependências novas: `npm install multer sharp` (mesmas já
 // usadas em avaliacoes.js — se já rodou aquela migração, já estão instaladas).
+//
+// Capa em foto e capa em vídeo são MUTUAMENTE EXCLUSIVAS: subir um vídeo
+// remove as 4 fotos existentes (removerFotosCapaAntigas) e marca
+// capa_tipo='video'; subir uma foto no slot 1 remove o vídeo existente
+// (removerVideoCapaAntigo) e volta capa_tipo='foto'. O front já impede o
+// usuário de tentar as duas coisas ao mesmo tempo (slots 2-4 desativados
+// em modo vídeo), isso aqui é a garantia do lado do servidor.
 // ==========================================================================
 const UPLOADS_DIR_PERFIL = path.join(__dirname, "../public/uploads/prestadores/perfil");
 const UPLOADS_DIR_CAPA = path.join(__dirname, "../public/uploads/prestadores/capa");
@@ -239,6 +278,22 @@ fs.mkdirSync(UPLOADS_DIR_PERFIL, { recursive: true });
 fs.mkdirSync(UPLOADS_DIR_CAPA, { recursive: true });
 
 const TAMANHO_MAXIMO_FOTO_PRESTADOR = 6 * 1024 * 1024; // 6MB, mesma folga da foto de avaliação
+
+// Sufixos dos 4 slots de foto de capa (slot 1 não leva sufixo — mesmo
+// padrão de fotosCapaPrestador() no front). fs.rm({force:true}) não erra
+// se o arquivo não existir, então dá pra chamar "às cegas" sem checar
+// existência antes (equivalente a um DELETE idempotente).
+const SUFIXOS_FOTOS_CAPA = ["", "-2", "-3", "-4"];
+
+function removerFotosCapaAntigas(id) {
+    SUFIXOS_FOTOS_CAPA.forEach((sufixo) => {
+        fs.rm(path.join(UPLOADS_DIR_CAPA, `${id}${sufixo}.webp`), { force: true }, () => {});
+    });
+}
+
+function removerVideoCapaAntigo(id) {
+    fs.rm(path.join(UPLOADS_DIR_CAPA, `${id}.mp4`), { force: true }, () => {});
+}
 
 const uploadFotoPrestador = multer({
     storage: multer.memoryStorage(),
@@ -319,10 +374,69 @@ router.post("/:id/foto-capa/:indice", receberFotoPrestador, exigirUsuario, exigi
             .resize(1200, 900, { fit: "inside", withoutEnlargement: true })
             .webp({ quality: 82 })
             .toFile(destino);
+
+        // Exclusividade: subir uma foto de capa (em qualquer slot) volta o
+        // prestador pro modo "fotos" — some com um vídeo que estivesse lá.
+        removerVideoCapaAntigo(req.params.id);
+        db.prepare("UPDATE prestadores SET capa_tipo = 'foto' WHERE id = ?").run(req.params.id);
+
         res.status(204).end();
     } catch (erro) {
         console.error("Falha ao processar foto de capa do prestador:", erro);
         res.status(400).json({ erro: "Não foi possível processar a foto enviada. Tente outra imagem." });
+    }
+});
+
+const TAMANHO_MAXIMO_VIDEO_CAPA = 70 * 1024 * 1024; // 70MB — combinado com Erik
+
+const uploadVideoCapaPrestador = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: TAMANHO_MAXIMO_VIDEO_CAPA },
+    fileFilter: (req, file, cb) => {
+        // Só .mp4 (h264) — outros formatos (webm, mov) variam de suporte
+        // dentro do WebView Android por aparelho/versão, e não vale o
+        // risco de "vídeo preto" pro usuário final. Duração (60s) não dá
+        // pra validar aqui sem ffmpeg/ffprobe no servidor — por ora fica
+        // só client-side (ver validarVideoCapa em script.js); reavaliar
+        // se algum vídeo mais longo passar batido.
+        if (file.mimetype !== "video/mp4") return cb(new Error("TIPO_INVALIDO"));
+        cb(null, true);
+    }
+});
+
+function receberVideoCapaPrestador(req, res, next) {
+    uploadVideoCapaPrestador.single("video")(req, res, (erro) => {
+        if (!erro) return next();
+
+        if (erro instanceof multer.MulterError && erro.code === "LIMIT_FILE_SIZE") {
+            return res.status(400).json({ erro: `Vídeo muito grande (máximo ${TAMANHO_MAXIMO_VIDEO_CAPA / 1024 / 1024}MB).` });
+        }
+        if (erro.message === "TIPO_INVALIDO") {
+            return res.status(400).json({ erro: "O vídeo de capa precisa ser .mp4." });
+        }
+        return res.status(400).json({ erro: "Não foi possível receber o vídeo enviado." });
+    });
+}
+
+// POST /api/prestadores/:id/capa-video — capa em vídeo, sempre 1 único
+// (sem "índice" como as fotos — é o slot principal). Sem sharp/transcode:
+// grava o buffer como veio (mimetype já garantido mp4 pelo fileFilter);
+// se no futuro precisar padronizar bitrate/resolução, ffmpeg entra aqui.
+router.post("/:id/capa-video", receberVideoCapaPrestador, exigirUsuario, exigirDono, async (req, res) => {
+    if (!req.file) return res.status(400).json({ erro: "Envie um vídeo no campo 'video'." });
+
+    try {
+        const destino = path.join(UPLOADS_DIR_CAPA, `${req.params.id}.mp4`);
+        await fs.promises.writeFile(destino, req.file.buffer);
+
+        // Exclusividade: vídeo de capa some com as 4 fotos existentes.
+        removerFotosCapaAntigas(req.params.id);
+        db.prepare("UPDATE prestadores SET capa_tipo = 'video' WHERE id = ?").run(req.params.id);
+
+        res.status(204).end();
+    } catch (erro) {
+        console.error("Falha ao salvar vídeo de capa do prestador:", erro);
+        res.status(400).json({ erro: "Não foi possível salvar o vídeo enviado." });
     }
 });
 

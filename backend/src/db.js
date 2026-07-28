@@ -41,6 +41,24 @@ if (!colunasUsuarios.some(c => c.name === "avatar_url")) {
     console.log("[db] migração aplicada: usuarios.avatar_url");
 }
 
+// dias_semana: array JSON de dias em que o prestador funciona (ver
+// routes/prestadores.js e formatarPrestador.js) — NULL/coluna ausente
+// continua se comportando como "todos os dias", igual sempre foi.
+const colunasPrestadores = db.prepare("PRAGMA table_info(prestadores)").all();
+if (!colunasPrestadores.some(c => c.name === "dias_semana")) {
+    db.exec("ALTER TABLE prestadores ADD COLUMN dias_semana TEXT");
+    console.log("[db] migração aplicada: prestadores.dias_semana");
+}
+
+// descricao: texto livre opcional do prestador, exibido na seção "Sobre"
+// do perfil público (ver routes/prestadores.js e formatarPrestador.js) —
+// NULL/coluna ausente vira estado vazio no front (perfil mostra "Este
+// prestador ainda não escreveu uma descrição."), nunca um erro.
+if (!colunasPrestadores.some(c => c.name === "descricao")) {
+    db.exec("ALTER TABLE prestadores ADD COLUMN descricao TEXT");
+    console.log("[db] migração aplicada: prestadores.descricao");
+}
+
 // ==========================================================================
 // SEED — os mesmos 6 prestadores fictícios que hoje vivem no array
 // PRESTADORES do script.js. Roda só se a tabela estiver vazia, então dar
