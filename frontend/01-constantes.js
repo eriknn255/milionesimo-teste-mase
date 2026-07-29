@@ -33,7 +33,7 @@ const PALETA_CORES_CADASTRO = ["#2f6fed", "#e0a52f", "#1c7a5e", "#8a4fd1"];
 const MAP_ID_CADASTRO = "11668dd49e3ef62f968278aa";
 
 // --- API / backend ---
-const API_BASE = "http://192.168.3.245:3000/api";
+const API_BASE = "https://mase-ec2.ruexinternet.com/api";
 const UPLOADS_BASE = API_BASE.replace(/\/api$/, "");
 const LIMITE_PRESTADORES_POR_CONTA = 3;
 const GOOGLE_CLIENT_ID = "131029563564-25fb10maaduh4ki6nu8pspqohp8kg49c.apps.googleusercontent.com";
