@@ -2723,9 +2723,7 @@ let CustomPopup; // definida dentro de initApp(), depois que google.maps.Overlay
 let markerCluster = null;
 
 let userLocationMarker = null;
-let userConeElement = null;
 let watchId = null;
-let orientationHandlerAtivo = false;
 let mapaCentralizadoNoUsuario = false;
 
 // Última posição real do usuário (GPS), atualizada a cada leitura do
@@ -2972,7 +2970,7 @@ function renderBioMarkdown(texto) {
     html = html.replace(/\*([^*\n]+)\*/g, "<strong>$1</strong>");
 
     // Itálico: _texto_
-    html = html.replace(/#([^#\n]+)#/g, "<em>$1</em>");
+    html = html.replace(/_([^_\n]+)_/g, "<em>$1</em>");
 
     // Quebra de linha
     html = html.replace(/\n/g, "<br>");
@@ -3518,8 +3516,6 @@ function criarMarcadorUsuarioSeNecessario(posicao) {
     const SVG_W = 40;
     const CENTRO_X = 20;
     const CENTRO_Y = 64; // = altura do wrapper (ver abaixo)
-    const CONE_ALTURA = 20; // mais curto (era 34)
-    const CONE_LARGURA = 17; // mais largo (era 13, medido do centro até cada lado)
     const SVG_H = CENTRO_Y + 10; // margem de 10px abaixo do centro para a metade inferior da bolinha; o SVG tem overflow:visible, então o cone pode ultrapassar o topo do viewBox sem ser cortado
 
     const wrapper = document.createElement("div");
@@ -3544,38 +3540,21 @@ function criarMarcadorUsuarioSeNecessario(posicao) {
     wrapper.innerHTML = `
         <svg width="${SVG_W}" height="${SVG_H}" viewBox="0 0 ${SVG_W} ${SVG_H}"
              style="position:absolute; top:0; left:0; overflow:visible;">
-            <g class="cone-direcao" transform="rotate(0 ${CENTRO_X} ${CENTRO_Y})" style="opacity:0; transition: opacity 0.2s ease;">
-                <polygon points="${CENTRO_X},${CENTRO_Y} ${CENTRO_X - CONE_LARGURA},${CENTRO_Y - CONE_ALTURA} ${CENTRO_X + CONE_LARGURA},${CENTRO_Y - CONE_ALTURA}"
-                         fill="rgba(66,133,244,0.35)" />
-            </g>
             <circle cx="${CENTRO_X}" cy="${CENTRO_Y}" r="9" fill="#4285F4" stroke="#ffffff" stroke-width="3" />
         </svg>
     `;
-
-    userConeElement = wrapper.querySelector(".cone-direcao");
 
     userLocationMarker = new google.maps.marker.AdvancedMarkerElement({
         map,
         position: posicao,
         title: "Sua localização",
         content: wrapper,
-        zIndex: 999
+        zIndex: 999,
+        gmpClickable: false
     });
-
-    userLocationMarker.__centroX = CENTRO_X;
-    userLocationMarker.__centroY = CENTRO_Y;
 }
 
-function atualizarHeadingUsuario(headingGraus) {
-    if (headingGraus === null || headingGraus === undefined || Number.isNaN(headingGraus)) return;
-    if (!userConeElement || !userLocationMarker) return;
-    const cx = userLocationMarker.__centroX;
-    const cy = userLocationMarker.__centroY;
-    userConeElement.style.opacity = "1";
-    userConeElement.setAttribute("transform", `rotate(${headingGraus} ${cx} ${cy})`);
-}
-
-function criarOuAtualizarMarcadorUsuario(latitude, longitude, headingGraus) {
+function criarOuAtualizarMarcadorUsuario(latitude, longitude) {
     const posicao = { lat: latitude, lng: longitude };
 
     // Guarda a posição real mais recente do usuário — é essa que vai
@@ -3586,10 +3565,6 @@ function criarOuAtualizarMarcadorUsuario(latitude, longitude, headingGraus) {
     criarMarcadorUsuarioSeNecessario(posicao);
     userLocationMarker.position = posicao;
 
-    if (headingGraus !== null && headingGraus !== undefined) {
-        atualizarHeadingUsuario(headingGraus);
-    }
-
     if (!mapaCentralizadoNoUsuario) {
         map.panTo(posicao);
         map.setZoom(16);
@@ -3599,45 +3574,6 @@ function criarOuAtualizarMarcadorUsuario(latitude, longitude, headingGraus) {
 
 /* ---- Bússola do dispositivo (fallback pra quando o usuário está parado,
    já que position.coords.heading só vem preenchido em movimento) ---- */
-function tratarOrientacaoDispositivo(event) {
-    // iOS expõe webkitCompassHeading (0 = Norte, sentido horário, já
-    // corrigido). Outros navegadores usam alpha, que precisa ser invertido
-    // (360 - alpha) pra virar "graus a partir do Norte, sentido horário".
-    let heading = null;
-    if (typeof event.webkitCompassHeading === "number") {
-        heading = event.webkitCompassHeading;
-    } else if (typeof event.alpha === "number") {
-        heading = 360 - event.alpha;
-    }
-    if (heading !== null) {
-        atualizarHeadingUsuario(heading);
-    }
-}
-
-function ativarBussolaDispositivo() {
-    if (orientationHandlerAtivo) return;
-    if (typeof DeviceOrientationEvent === "undefined") return;
-
-    const eventoUsado = "ondeviceorientationabsolute" in window
-        ? "deviceorientationabsolute"
-        : "deviceorientation";
-
-    // iOS 13+ exige permissão explícita, só pode ser pedida em resposta a
-    // um gesto do usuário (ex: clique). Em outros navegadores, funciona direto.
-    if (typeof DeviceOrientationEvent.requestPermission === "function") {
-        DeviceOrientationEvent.requestPermission()
-            .then(resposta => {
-                if (resposta === "granted") {
-                    window.addEventListener(eventoUsado, tratarOrientacaoDispositivo);
-                    orientationHandlerAtivo = true;
-                }
-            })
-            .catch(erro => console.warn("Permissão de bússola negada:", erro));
-    } else {
-        window.addEventListener(eventoUsado, tratarOrientacaoDispositivo);
-        orientationHandlerAtivo = true;
-    }
-}
 
 function iniciarRastreioLocalizacao() {
     if (!navigator.geolocation) {
@@ -3649,8 +3585,7 @@ function iniciarRastreioLocalizacao() {
         (position) => {
             criarOuAtualizarMarcadorUsuario(
                 position.coords.latitude,
-                position.coords.longitude,
-                position.coords.heading
+                position.coords.longitude
             );
         },
         (erro) => {
@@ -3662,22 +3597,6 @@ function iniciarRastreioLocalizacao() {
             maximumAge: 0
         }
     );
-
-    // No iOS, a permissão da bússola só pode ser pedida em resposta a um
-    // gesto do usuário — então ativamos no primeiro toque/clique na página.
-    const ativarBussolaNoPrimeiroToque = () => {
-        ativarBussolaDispositivo();
-        document.removeEventListener("click", ativarBussolaNoPrimeiroToque);
-        document.removeEventListener("touchstart", ativarBussolaNoPrimeiroToque);
-    };
-
-    if (typeof DeviceOrientationEvent !== "undefined" &&
-        typeof DeviceOrientationEvent.requestPermission === "function") {
-        document.addEventListener("click", ativarBussolaNoPrimeiroToque);
-        document.addEventListener("touchstart", ativarBussolaNoPrimeiroToque);
-    } else {
-        ativarBussolaDispositivo();
-    }
 }
 
 function limparMarcadores() {
