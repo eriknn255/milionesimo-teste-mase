@@ -224,6 +224,17 @@ footer {
     box-shadow: var(--shadow-float-hover), 0 0 0 3px rgba(var(--gold-rgb), 0.35);
 }
 
+/* type="search" (ver index.html — trocado de "text" pra evitar teclado/
+   autofill mobile tratando o campo como senha) tem decoração nativa
+   própria em alguns navegadores (o "x" de limpar do Safari/WebKit) — já
+   existe um botão de limpar customizado (#clearSearchBtn), então escondo
+   a decoração nativa pra não duplicar. */
+.MapFind::-webkit-search-cancel-button,
+.MapFind::-webkit-search-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+}
+
 /* Botão "x" pra apagar a busca de uma vez — só aparece com texto no
    campo (ver atualizarVisibilidadeClearBtn em script.js). Fica dentro do
    próprio FindBox, então não disputa espaço com o botão de lupa (FindIcon,
@@ -270,10 +281,25 @@ footer {
 
 .ChipsRow::-webkit-scrollbar { display: none; }
 
+/* Esconde a barra de rolagem em QUALQUER contêiner com rolagem vertical
+   do app (ResultsList, SavedPage, ProviderProfile, TimePickerPanelOptions,
+   #page-profile, #page-menu, e qualquer outro que apareça depois) —
+   mesmo padrão já usado acima no ChipsRow (rolagem horizontal). A rolagem
+   em si continua funcionando normal, só o trilho/thumb fica invisível. */
+* {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+*::-webkit-scrollbar {
+    display: none;
+}
+
 .Chip {
     flex-shrink: 0;
-    padding: 9px 16px;
-    border: none;
+    /* padding reduzido em 1px pra compensar a borda nova abaixo — o
+       tamanho final do chip fica igual ao anterior (sem borda) */
+    padding: 8px 15px;
+    border: 1px solid var(--border);
     border-radius: 999px;
     background-color: var(--paper);
     color: var(--ink-text);
@@ -281,7 +307,7 @@ footer {
     font-weight: 700;
     font-size: 13px;
     white-space: nowrap;
-    transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
 .Chip:active {
@@ -297,6 +323,7 @@ footer {
 .Chip.is-active {
     background-color: var(--gold) !important;
     color: var(--ink) !important;
+    border-color: var(--gold) !important;
 }
 
 /* ==========================================================================
@@ -437,8 +464,7 @@ footer {
 
 .ResultItem {
     display: flex;
-    align-items: center;
-    gap: 12px;
+    flex-direction: column;
     width: 100%;
     padding: 11px 18px;
     border: none;
@@ -453,6 +479,15 @@ footer {
 
 .ResultItem:active { background-color: var(--paper-tint); }
 
+/* Avatar + nome/categoria — era o layout do .ResultItem antigo, agora
+   isolado aqui porque .ResultItem virou uma coluna (esta linha em cima,
+   .ResultStatusRow embaixo, largura cheia, ver mais abaixo). */
+.ResultItem .ResultTopSection {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
 .ResultItem .ResultAvatar {
     flex-shrink: 0;
     width: 42px;
@@ -464,6 +499,10 @@ footer {
     color: var(--paper);
     font-weight: 700;
     font-size: 15px;
+    /* anel de 2 camadas: respiro branco + contorno neutro — deixa foto
+       real e iniciais com a mesma "moldura", em vez de a foto flutuar
+       sem borda e as iniciais ficarem soltas */
+    box-shadow: 0 0 0 2px var(--paper), 0 0 0 3px var(--border);
 }
 
 .ResultItem .ResultInfo {
@@ -471,7 +510,19 @@ footer {
     min-width: 0;
 }
 
+/* Nome e distância na mesma linha, no topo do bloco de texto — a
+   distância fica sempre colada ao nome (nunca solta, flutuando sozinha).
+   min-width:0 no nome + flex-shrink:0 na distância garante que é sempre
+   o NOME que cede espaço (reticências), nunca a distância. */
+.ResultItem .ResultTopRow {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
 .ResultItem .ResultName {
+    flex: 1;
+    min-width: 0;
     font-family: var(--font-display);
     font-size: 16px;
     font-weight: 600;
@@ -486,8 +537,30 @@ footer {
     color: var(--muted);
     margin-top: 3px;
     display: flex;
-    gap: 6px;
+    gap: 8px;
     align-items: center;
+    min-width: 0;
+}
+
+/* categoria é sempre o primeiro item de .ResultMeta (nome do serviço,
+   antes da nota e da distância) — separa o peso dela do resto sem
+   precisar de uma classe nova gerada pelo script.js. min-width:0 +
+   nowrap/ellipsis evita ela quebrar em 2 linhas quando o card fica
+   estreito (span vira item flex e, sem isso, o texto quebra sozinho
+   dentro dele em vez de cortar com "..."). */
+.ResultItem .ResultMeta > *:first-child {
+    font-weight: 500;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* nota/contagem nunca quebram nem encolhem — só a categoria acima cede
+   espaço quando falta largura */
+.ResultItem .ResultMeta > *:not(:first-child) {
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .ResultItem .ResultRating { color: var(--gold); font-weight: 700; }
@@ -831,6 +904,31 @@ footer {
     gap: 8px;
     margin-top: 6px;
     flex-wrap: wrap;
+}
+
+/* Badge + horário juntos, como linha própria (filha direta de
+   .ResultItem, que virou coluna) — fica com largura cheia, encostada na
+   borda esquerda do card, embaixo do avatar+texto, em vez de indentada
+   alinhada só com a coluna de texto. Só na lista de resultados: nunca
+   quebra linha entre badge e horário (o texto do horário é que corta
+   com reticências se faltar espaço); não mexe em
+   .ProviderProfileStatusRow (perfil tem mais largura, pode quebrar). */
+.ResultItem .ResultStatusRow {
+    flex-wrap: nowrap;
+    min-width: 0;
+    padding-top: 0.45vh;
+}
+
+.ResultItem .StatusBadge {
+    flex-shrink: 0;
+}
+
+.ResultItem .StatusBadgeHorario {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .ProviderProfileBio {

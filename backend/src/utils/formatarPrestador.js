@@ -55,7 +55,14 @@ function formatarPrestador(linha) {
         },
         donoUsuarioId: linha.dono_usuario_id || null,
         avatarUrl: temDono ? (linha.dono_avatar_url || null) : null,
-        avatarCustomizado: temDono ? !!linha.dono_avatar_customizado : false,
+        // Raw (não !!): 0 = sem foto própria, ou o timestamp (ms) de quando
+        // a conta subiu a última foto própria. O front usa esse número tanto
+        // pra decidir "tem foto customizada?" (truthy/falsy, funciona igual
+        // um booleano) quanto como cache-bust na URL (?v=...) — ver
+        // avatarUrlEfetivo em 00-script.js. Virar booleano aqui destruiria
+        // essa segunda informação e a foto nova nunca apareceria pra quem
+        // já tinha a antiga em cache.
+        avatarCustomizado: temDono ? (linha.dono_avatar_customizado || 0) : 0,
         capaTipo: linha.capa_tipo || "foto",
         nota: {
             quantidade: linha.avaliacoes_quantidade || 0,

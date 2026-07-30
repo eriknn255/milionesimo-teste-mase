@@ -1,4 +1,4 @@
-console.log("[maps.js] versão carregada: cone-svg-v2");
+console.log("[console-log] versão web-prototype do app");
 
 /* ==========================================================================
    CARREGADOR DE TEMPLATES HTML (04-cad-prestador.html, 05-perfil-prestador.html)
@@ -67,7 +67,7 @@ function estaAberto(prestador) {
 // avulsos) — mesma lógica visual que qualquer agenda usa pra não escrever
 // "Dom, Seg, Ter, Qua, Qui, Sex, Sáb" por extenso quando é só "todo dia".
 function textoDiasSemana(dias) {
-    if (!Array.isArray(dias) || dias.length === 0 || dias.length === 7) return "Todos os dias";
+    if (!Array.isArray(dias) || dias.length === 0 || dias.length === 7) return "Todo dia";
     const ordenados = [...dias].sort((a, b) => a - b);
     const contiguo = ordenados.length > 1 && ordenados.every((d, i) => i === 0 || d === ordenados[i - 1] + 1);
     if (contiguo) return `${NOMES_DIAS_ABREV[ordenados[0]]}–${NOMES_DIAS_ABREV[ordenados[ordenados.length - 1]]}`;
@@ -90,12 +90,25 @@ function horarioTextoPrestador(prestador) {
 /* Badge reaproveitado no popup do mapa, no perfil e na lista de resultados.
    Cor segue o mesmo sistema do resto do app: esmeralda = positivo/aberto,
    tom neutro (--muted) = fechado, sem soar como erro. */
-function badgeHorarioHTML(prestador) {
+/* Badge e horário separados — statusBadgeHTML/statusHorarioHTML são usados
+   sozinhos na lista de resultados (badge embaixo do avatar, horário na
+   coluna de texto). badgeHorarioHTML continua igual, combinando os dois,
+   pros outros lugares que ainda mostram tudo junto (popup do mapa, perfil,
+   "meus cadastros" — ver usos abaixo). */
+function statusBadgeHTML(prestador) {
     const aberto = estaAberto(prestador);
     const classe = aberto ? "StatusBadge StatusBadge--aberto" : "StatusBadge StatusBadge--fechado";
     const texto = aberto ? "Aberto agora" : "Fechado agora";
+    return `<span class="${classe}">${texto}</span>`;
+}
+
+function statusHorarioHTML(prestador) {
     const horarioTexto = horarioTextoPrestador(prestador);
-    return `<span class="${classe}">${texto}</span>${horarioTexto ? `<span class="StatusBadgeHorario">${horarioTexto}</span>` : ""}`;
+    return horarioTexto ? `<span class="StatusBadgeHorario">${horarioTexto}</span>` : "";
+}
+
+function badgeHorarioHTML(prestador) {
+    return statusBadgeHTML(prestador) + statusHorarioHTML(prestador);
 }
 
 /* ==========================================================================
@@ -433,7 +446,7 @@ function mapearPrestadorDoBackend(p) {
         horario: p.horario,
         donoUsuarioId: p.donoUsuarioId,
         avatarUrl: p.avatarUrl || null,
-        avatarCustomizado: !!p.avatarCustomizado,
+        avatarCustomizado: p.avatarCustomizado || 0,
         nota: p.nota,
         capaTipo: p.capaTipo || "foto"
     };
@@ -444,13 +457,17 @@ function mapearPrestadorDoBackend(p) {
 // (classe CSS is-empty, omitir contagem, etc.), aqui só o texto.
 function textoNotaPrestador(nota) {
     if (!nota || nota.quantidade === 0) {
-        return { temNota: false, estrelas: "Nenhuma avaliação", contagem: "" };
+        return { 
+            temNota: false, 
+            estrelas: `★`, 
+            contagem: "n/a" 
+        };
     }
 
     return {
         temNota: true,
         estrelas: `★ ${nota.media.toFixed(1)}`,
-        contagem: `${nota.quantidade} avaliaç${nota.quantidade === 1 ? "ão" : "ões"}`
+        contagem: `${nota.quantidade}`
     };
 }
 
@@ -549,7 +566,7 @@ async function alternarPrestadorSalvo(id) {
 let usuarioLogado = false;
 let usuarioId = null;
 let tokenSessao = null; // JWT assinado pelo servidor (ver middleware/identidade.js) — prova quem é a pessoa, o id sozinho não prova mais nada
-let perfilUsuarioCache = { nome: "Você", email: "", telefone: "", avatarUrl: null, avatarCustomizado: false };
+let perfilUsuarioCache = { nome: "Você", email: "", telefone: "", avatarUrl: null, avatarCustomizado: 0 };
 
 // Monta os headers de autenticação (Authorization: Bearer <token>) pra
 // misturar com outros headers da request (ex: Content-Type). Sem sessão
@@ -675,8 +692,7 @@ async function entrarComGoogle(credential) {
     usuarioId = usuario.id;
     tokenSessao = usuario.token;
     usuarioLogado = true;
-    perfilUsuarioCache = { nome: usuario.nome, email: usuario.email, telefone: usuario.telefone, avatarUrl: usuario.avatarUrl, avatarCustomizado: !!usuario.avatarCustomizado };
-    localStorage.setItem(CHAVE_USUARIO_ID, usuarioId);
+    perfilUsuarioCache = { nome: usuario.nome, email: usuario.email, telefone: usuario.telefone, avatarUrl: usuario.avatarUrl, avatarCustomizado: usuario.avatarCustomizado || 0 };
     localStorage.setItem(CHAVE_TOKEN_SESSAO, tokenSessao);
     renderizarPaginaPerfil();
     carregarIdsSalvos(); // não bloqueia o login — completa em segundo plano
@@ -721,7 +737,7 @@ async function restaurarSessao() {
         const usuario = await resp.json();
         usuarioId = usuario.id;
         usuarioLogado = true;
-        perfilUsuarioCache = { nome: usuario.nome, email: usuario.email, telefone: usuario.telefone, avatarUrl: usuario.avatarUrl, avatarCustomizado: !!usuario.avatarCustomizado };
+        perfilUsuarioCache = { nome: usuario.nome, email: usuario.email, telefone: usuario.telefone, avatarUrl: usuario.avatarUrl, avatarCustomizado: usuario.avatarCustomizado || 0 };
         carregarIdsSalvos(); // idem: não bloqueia, completa em segundo plano
     } catch (erro) {
         console.warn("Sessão salva não é mais válida, saindo:", erro);
@@ -874,7 +890,8 @@ function abrirEditarPerfil() {
                 const corpo = await resp.json().catch(() => ({}));
                 throw new Error(corpo.erro || `Não foi possível enviar a foto (HTTP ${resp.status}).`);
             }
-            perfilUsuarioCache.avatarCustomizado = true;
+            const atualizado = await resp.json();
+            perfilUsuarioCache.avatarCustomizado = atualizado.avatarCustomizado;
             avatarStatusEl.textContent = "Toque na foto pra trocar.";
             atualizarAvatarLocal();
         } catch (erro) {
@@ -895,7 +912,7 @@ function abrirEditarPerfil() {
                 const corpo = await resp.json().catch(() => ({}));
                 throw new Error(corpo.erro || `Não foi possível reverter (HTTP ${resp.status}).`);
             }
-            perfilUsuarioCache.avatarCustomizado = false;
+            perfilUsuarioCache.avatarCustomizado = 0;
             avatarStatusEl.textContent = "Toque na foto pra trocar.";
             atualizarAvatarLocal();
         } catch (erro) {
@@ -1628,7 +1645,7 @@ async function renderizarAvaliacoesPendentes() {
             <div class="AvaliacaoPendenteItem" data-id="${av.id}">
                 <div class="AvaliacaoPendenteHeader">
                     <div class="AvaliacaoPendenteAutorRow">
-                        ${avatarClienteHTML(av.autorNome, av.autorAvatarUrl, "AvaliacaoPendenteAvatar")}
+                        ${avatarClienteHTML(av.autorNome, av.autorAvatarUrl, "AvaliacaoPendenteAvatar", av.autorUsuarioId, av.autorAvatarCustomizado)}
                         <div class="AvaliacaoPendenteAutor">${av.autorNome}</div>
                     </div>
                     <div class="AvaliacaoPendentePrazo">expira em ${diasRestantes}d</div>
@@ -2779,10 +2796,17 @@ function fotoUsuarioPrestador(id) {
 // Decide qual URL de avatar usar: a customizada (nosso upload) tem
 // prioridade sobre a do Google — mesma regra em todo canto que mostra
 // avatar de conta/prestador (popup, pin do mapa, lista, "Meu perfil",
-// preview do cadastro). avatarUrl aqui é sempre a do Google (ou null);
-// avatarCustomizado é a flag que decide se ignora ela.
+// preview do cadastro, avatar de quem avaliou). avatarUrl aqui é sempre a
+// do Google (ou null); avatarCustomizado NÃO é mais um booleano puro — é
+// 0 (sem foto própria) ou o timestamp (ms) de quando a foto própria foi
+// trocada pela última vez (ver POST /usuarios/:id/avatar no backend).
+// Esse número dobra como cache-bust (?v=...): o arquivo em disco tem
+// sempre o MESMO nome (id da conta), então sem algo que muda a cada
+// upload, a URL da foto nova seria idêntica à da antiga, e o navegador
+// jamais pediria a versão nova de novo — ficaria preso na primeira foto
+// que qualquer tela carregou, pra sempre.
 function avatarUrlEfetivo(id, avatarUrl, avatarCustomizado) {
-    return avatarCustomizado ? fotoUsuarioPrestador(id) : avatarUrl;
+    return avatarCustomizado ? `${fotoUsuarioPrestador(id)}?v=${avatarCustomizado}` : avatarUrl;
 }
 
 // Capa em vídeo — exclusiva com as 4 fotos de fotosCapaPrestador() (ver
@@ -2791,7 +2815,7 @@ function avatarUrlEfetivo(id, avatarUrl, avatarCustomizado) {
 // máx 60s / 30MB, só .mp4 (h264, roda confiável no WebView Android) —
 // duração só é validada no CLIENTE (validarVideoCapa mais abaixo), o
 // servidor não tem ffmpeg/ffprobe pra confirmar de novo.
-const TAMANHO_MAXIMO_VIDEO_CAPA_BYTES = 30 * 1024 * 1024;
+const TAMANHO_MAXIMO_VIDEO_CAPA_BYTES = 70 * 1024 * 1024;
 const DURACAO_MAXIMA_VIDEO_CAPA_SEGUNDOS = 60;
 
 function fotoCapaVideoPrestador(id) {
@@ -2855,18 +2879,19 @@ function avatarHTML(prestador, className) {
 // do próprio usuário (renderizarPaginaPerfil) — aqui pra avatar de CLIENTE
 // (quem avaliou), que não tem "categoria"/cor fixa, então cai pra letra do
 // nome sobre --ink (cor já definida nas classes .ProviderProfileReviewAvatar
-// / .AvaliacaoPendenteAvatar em style.css). avatarUrl vem de
-// usuarios.avatar_url no backend — mesma foto de perfil do Google usada em
-// perfilUsuarioCache — por isso precisa de referrerpolicy="no-referrer"
-// (o CDN lh3.googleusercontent.com às vezes recusa a imagem se a página
-// mandar o referrer completo, mesmo problema já contornado em
-// renderizarPaginaPerfil). id é opcional (nem toda chamada tem o
-// usuarioId de quem avaliou à mão) — sem ele, o placeholder cai pro nome
-// como semente (ainda determinístico, só que dois autores com o mesmo
-// nome caem no mesmo desenho).
-function avatarClienteHTML(nome, avatarUrl, className, id) {
+// / .AvaliacaoPendenteAvatar em style.css). avatarUrl/avatarCustomizado vêm
+// de usuarios.avatar_url/avatar_customizado no backend — passam por
+// avatarUrlEfetivo() igual o avatar de prestador, pra respeitar foto
+// própria (não só a do Google) e aplicar o mesmo cache-bust. id é o
+// usuarioId de quem avaliou — ESSENCIAL pro placeholder ilustrado (quando
+// não há foto nenhuma) cair no MESMO desenho que "Meu perfil"/
+// "Preferências da conta" dessa pessoa mostram; sem ele, cada tela
+// sorteava um desenho diferente pra mesma conta. Só cai no nome como
+// semente (menos preciso, mas ainda determinístico) se por algum motivo
+// vier sem id.
+function avatarClienteHTML(nome, avatarUrl, className, id, avatarCustomizado) {
     const inicial = (nome || "?").trim().charAt(0).toUpperCase();
-    const url = avatarUrl || placeholderAvatarPara(id || nome);
+    const url = avatarUrlEfetivo(id, avatarUrl, avatarCustomizado) || placeholderAvatarPara(id || nome);
     return `
         <div class="${className}" style="position:relative; overflow:hidden;">
             <span>${inicial}</span>
@@ -3394,7 +3419,7 @@ async function abrirPerfilPrestador(prestador) {
     slot("avaliacao").innerHTML = avaliacao ? `
         <div class="ProviderProfileReview">
             <div class="ProviderProfileReviewHeader">
-                ${avatarClienteHTML(avaliacao.nome, avaliacao.avatarUrl, "ProviderProfileReviewAvatar")}
+                ${avatarClienteHTML(avaliacao.nome, avaliacao.avatarUrl, "ProviderProfileReviewAvatar", avaliacao.usuarioId, avaliacao.avatarCustomizado)}
                 <div>
                     <div class="ProviderProfileReviewName">${avaliacao.nome}</div>
                     <div class="ProviderProfileReviewStars">${"★".repeat(avaliacao.nota)}${"☆".repeat(5 - avaliacao.nota)}</div>
@@ -3905,17 +3930,21 @@ function renderizarLista(resultados) {
         item.type = "button";
         item.className = "ResultItem";
         item.innerHTML = `
-            ${avatarHTML(prestador, "ResultAvatar")}
-            <div class="ResultInfo">
-                <div class="ResultName">${prestador.nome}</div>
-                <div class="ResultMeta">
-                    <span>${prestador.categoria}</span>
-                    <span class="ResultRating${nota.temNota ? "" : " is-empty"}">${nota.estrelas}</span>
-                    ${nota.temNota ? `<span>(${nota.contagem})</span>` : ""}
+            <div class="ResultTopSection">
+                ${avatarHTML(prestador, "ResultAvatar")}
+                <div class="ResultInfo">
+                    <div class="ResultTopRow">
+                        <div class="ResultName">${prestador.nome}</div>
+                        <div class="ResultDistance">${formatarDistancia(distancia)}</div>
+                    </div>
+                    <div class="ResultMeta">
+                        <span>${prestador.categoria}</span>
+                        <span class="ResultRating${nota.temNota ? "" : " is-empty"}">${nota.estrelas}</span>
+                        ${nota.temNota ? `<span>(${nota.contagem})</span>` : ""}
+                    </div>
                 </div>
-                <div class="ResultStatusRow">${badgeHorarioHTML(prestador)}</div>
             </div>
-            <div class="ResultDistance">${formatarDistancia(distancia)}</div>
+            <div class="ResultStatusRow">${badgeHorarioHTML(prestador)}</div>
         `;
         item.addEventListener("click", () => {
             map.panTo(marker.position);
