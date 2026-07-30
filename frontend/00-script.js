@@ -2972,7 +2972,7 @@ function renderBioMarkdown(texto) {
     html = html.replace(/\*([^*\n]+)\*/g, "<strong>$1</strong>");
 
     // Itálico: _texto_
-    html = html.replace(/_([^_\n]+)_/g, "<em>$1</em>");
+    html = html.replace(/#([^#\n]+)#/g, "<em>$1</em>");
 
     // Quebra de linha
     html = html.replace(/\n/g, "<br>");
