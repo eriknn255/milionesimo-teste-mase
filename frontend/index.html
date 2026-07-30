@@ -21,10 +21,11 @@
     <div class="Page is-active" id="page-home">
         <header>
             <div class="SearchWrap">
-                <form class="SearchRow" id="searchForm">
+                <form class="SearchRow" id="searchForm" autocomplete="off">
                     <div class="FindBox">
-                        <input type="text" class="MapFind" id="searchInput" placeholder="De quem você precisa hoje?"
-                            autocomplete="off">
+                        <input type="search" class="MapFind" id="searchInput" name="busca-prestador"
+                            placeholder="De quem você precisa hoje?" autocomplete="off" autocapitalize="off"
+                            spellcheck="false" data-lpignore="true" data-form-type="other">
                         <button type="button" class="ClearSearchBtn" id="clearSearchBtn" aria-label="Apagar busca"
                             hidden>
                             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">

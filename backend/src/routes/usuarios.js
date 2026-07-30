@@ -14,8 +14,17 @@ const { formatarPrestador, SELECT_PRESTADORES_COM_NOTA } = require("../utils/for
 const router = express.Router();
 
 // ==========================================================================
-// MIGRAÇÃO LEVE: avatar_customizado (0/1) — diz se a conta subiu uma foto
-// própria (POST /:id/avatar) que deve valer no lugar da foto do Google.
+// MIGRAÇÃO LEVE: avatar_customizado — diz se a conta subiu uma foto
+// própria (POST /:id/avatar) que deve valer no lugar da foto do Google, E
+// funciona como "versão" da foto: guarda 0 (nunca customizou) ou o
+// timestamp (ms) do último upload — não é mais um booleano puro. Isso
+// serve de cache-bust na URL da foto (?v=<timestamp>, ver avatarUrlEfetivo
+// no front): o arquivo em disco tem sempre o mesmo nome determinístico
+// (id da conta), então sem um valor que MUDA a cada upload, trocar a foto
+// mantém a mesma URL de sempre e o navegador nunca pediria a versão nova
+// — ficaria com a antiga em cache pra sempre, em qualquer lugar que já
+// tivesse carregado ela antes (era exatamente o bug relatado: foto trocada
+// não atualizava em todo canto).
 // A foto do Google em si continua sendo sincronizada a cada login (coluna
 // avatar_url, ver /entrar-google) independente disso — assim reverter
 // (DELETE /:id/avatar) é só zerar essa flag, sem perder a foto do Google
@@ -139,14 +148,14 @@ router.post("/entrar-google", async (req, res) => {
     }
 
     const token = assinarTokenSessao(usuario.id);
-    res.json({ ...usuario, avatarCustomizado: !!usuario.avatarCustomizado, token });
+    res.json({ ...usuario, token });
 });
 
 // GET /api/usuarios/:id
 router.get("/:id", (req, res) => {
     const usuario = db.prepare(SELECT_USUARIO).get(req.params.id);
     if (!usuario) return res.status(404).json({ erro: "Usuário não encontrado." });
-    res.json({ ...usuario, avatarCustomizado: !!usuario.avatarCustomizado });
+    res.json(usuario);
 });
 
 // PATCH /api/usuarios/:id — editar perfil (hoje só o nome é editável no front;
@@ -165,7 +174,7 @@ router.patch("/:id", exigirUsuario, (req, res) => {
     // já trazer avatarUrl no formato certo (req.usuario vem do middleware,
     // que pode ter sido escrito antes dessa coluna existir).
     const atualizado = db.prepare(SELECT_USUARIO).get(req.params.id);
-    res.json({ ...atualizado, avatarCustomizado: !!atualizado.avatarCustomizado });
+    res.json(atualizado);
 });
 
 // POST /api/usuarios/:id/avatar — sobe uma foto própria pra conta, que
@@ -188,8 +197,13 @@ router.post("/:id/avatar", receberAvatarUsuario, exigirUsuario, async (req, res)
             .webp({ quality: 85 })
             .toFile(destino);
 
-        db.prepare("UPDATE usuarios SET avatar_customizado = 1 WHERE id = ?").run(req.params.id);
-        res.status(204).end();
+        // Date.now() (não 1): esse valor dobra como "versão" da foto pra
+        // cache-bust no front (?v=..., ver avatarUrlEfetivo em
+        // 00-script.js) — precisa mudar a cada upload, senão a URL fica
+        // idêntica à de antes e o navegador nunca busca a versão nova.
+        const versao = Date.now();
+        db.prepare("UPDATE usuarios SET avatar_customizado = ? WHERE id = ?").run(versao, req.params.id);
+        res.json({ avatarCustomizado: versao });
     } catch (erro) {
         console.error("Falha ao processar avatar da conta:", erro);
         res.status(400).json({ erro: "Não foi possível processar a imagem enviada. Tente outra foto." });

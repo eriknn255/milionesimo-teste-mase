@@ -162,14 +162,21 @@ router.get("/prestadores/:id/avaliacoes/pendentes", exigirUsuario, (req, res) =>
         return res.status(403).json({ erro: "Só o dono do prestador vê a fila de avaliações pendentes." });
     }
 
-    // JOIN com usuarios só pra pegar o avatarUrl de quem avaliou (mesma
-    // foto do Google usada no resto do app, ver renderizarPaginaPerfil no
-    // front) — não muda o que a fila cega já mostra (nota/comentário
-    // continuam de fora, só ganhou uma foto ao lado do nome). LEFT JOIN
-    // porque autor_usuario_id sempre existe (login obrigatório pra
-    // avaliar), mas o usuário pode não ter avatar_url preenchido.
+    // JOIN com usuarios pra pegar id/avatarUrl/avatarCustomizado de quem
+    // avaliou (mesma foto de conta usada no resto do app, ver
+    // avatarUrlEfetivo no front) — não muda o que a fila cega já mostra
+    // (nota/comentário continuam de fora, só ganhou uma foto ao lado do
+    // nome). autorUsuarioId vai junto pro front conseguir tanto aplicar
+    // avatarUrlEfetivo (considerar foto própria, não só a do Google)
+    // quanto sortear o MESMO placeholder ilustrado que aparece em "Meu
+    // perfil"/"Preferências da conta" dessa pessoa quando não há foto
+    // nenhuma — sem o id, cada tela sorteava um desenho diferente pra a
+    // mesma conta. LEFT JOIN porque autor_usuario_id sempre existe (login
+    // obrigatório pra avaliar), mas o usuário pode não ter avatar_url
+    // preenchido.
     const pendentes = db.prepare(`
-        SELECT a.id, a.autor_nome AS autorNome, u.avatar_url AS autorAvatarUrl,
+        SELECT a.id, a.autor_nome AS autorNome, a.autor_usuario_id AS autorUsuarioId,
+               u.avatar_url AS autorAvatarUrl, u.avatar_customizado AS autorAvatarCustomizado,
                a.via_whatsapp AS viaWhatsapp, a.criado_em AS criadoEm
         FROM avaliacoes a
         LEFT JOIN usuarios u ON u.id = a.autor_usuario_id
@@ -177,7 +184,7 @@ router.get("/prestadores/:id/avaliacoes/pendentes", exigirUsuario, (req, res) =>
         ORDER BY a.criado_em ASC
     `).all(req.params.id);
 
-    res.json(pendentes.map(p => ({ ...p, viaWhatsapp: !!p.viaWhatsapp })));
+    res.json(pendentes.map(p => ({ ...p, viaWhatsapp: !!p.viaWhatsapp, autorAvatarCustomizado: p.autorAvatarCustomizado || 0 })));
 });
 
 // POST /api/avaliacoes/:id/aceitar — dono publica.
@@ -242,11 +249,12 @@ function urlAbsolutaFoto(req, caminhoRelativo) {
 // GET /api/prestadores/:id/avaliacoes/ultima — a review real mais recente
 // publicada (substitui avaliacaoParaExibir). null quando não há nenhuma.
 router.get("/prestadores/:id/avaliacoes/ultima", (req, res) => {
-    // Mesmo LEFT JOIN da fila de pendentes, pra devolver o avatarUrl de
-    // quem avaliou junto com a review em si (ver ProviderProfileReviewAvatar
-    // no front).
+    // Mesmo LEFT JOIN da fila de pendentes, pra devolver id/avatarUrl/
+    // avatarCustomizado de quem avaliou junto com a review em si (ver
+    // avatarUrlEfetivo + ProviderProfileReviewAvatar no front).
     const ultima = db.prepare(`
-        SELECT a.autor_nome AS nome, u.avatar_url AS avatarUrl,
+        SELECT a.autor_nome AS nome, a.autor_usuario_id AS usuarioId,
+               u.avatar_url AS avatarUrl, u.avatar_customizado AS avatarCustomizado,
                a.comentario, a.nota, a.foto_url AS fotoUrl
         FROM avaliacoes a
         LEFT JOIN usuarios u ON u.id = a.autor_usuario_id
@@ -256,7 +264,7 @@ router.get("/prestadores/:id/avaliacoes/ultima", (req, res) => {
     `).get(req.params.id);
 
     if (!ultima) return res.json(null);
-    res.json({ ...ultima, fotoUrl: urlAbsolutaFoto(req, ultima.fotoUrl) });
+    res.json({ ...ultima, avatarCustomizado: ultima.avatarCustomizado || 0, fotoUrl: urlAbsolutaFoto(req, ultima.fotoUrl) });
 });
 
 // GET /api/prestadores/:id/fotos-clientes — galeria de fotos reais
