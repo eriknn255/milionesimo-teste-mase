@@ -769,7 +769,6 @@ footer {
     position: relative;
     width: 100%;
     aspect-ratio: 16 / 9;
-    background-color: var(--placeholder-bg);
 }
 
 .ProviderProfileCoverImg {
@@ -781,6 +780,7 @@ footer {
     display: block;
     opacity: 0;
     transition: opacity 0.6s ease;
+    border-radius: 0 0 2.45vh 2.45vh;
 }
 .ProviderProfileCoverImg.is-active { opacity: 1; }
 
