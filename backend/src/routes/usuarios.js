@@ -10,6 +10,7 @@ const db = require("../db");
 const { sanitizarTexto } = require("../utils/sanitizar");
 const { exigirUsuario } = require("../middleware/identidade");
 const { formatarPrestador, SELECT_PRESTADORES_COM_NOTA } = require("../utils/formatarPrestador");
+const { criarNotificacao } = require("../utils/criarNotificacao");
 
 const router = express.Router();
 
@@ -152,7 +153,20 @@ router.post("/entrar-google", async (req, res) => {
 });
 
 // GET /api/usuarios/:id
-router.get("/:id", (req, res) => {
+// Exige sessão válida (exigirUsuario) porque é esta rota que
+// restaurarSessao() usa no front pra CONFIRMAR que o token salvo ainda
+// vale — sem essa checagem, qualquer id existente respondia 200 mesmo com
+// token corrompido/expirado, e o front seguia achando a sessão boa (sino
+// aparecia, polling de /notificacoes/nao-lidas começava) até essa outra
+// rota, sim protegida, falhar com 401 pra sempre, silenciosamente.
+// Também passa a exigir que seja a própria conta (mesmo padrão do
+// PATCH/avatar abaixo) — nunca foi pra ser um "perfil público" de outra
+// pessoa, então não faz sentido vazar email/telefone de terceiros.
+router.get("/:id", exigirUsuario, (req, res) => {
+    if (req.usuario.id !== req.params.id) {
+        return res.status(403).json({ erro: "Só dá pra consultar a própria conta." });
+    }
+
     const usuario = db.prepare(SELECT_USUARIO).get(req.params.id);
     if (!usuario) return res.status(404).json({ erro: "Usuário não encontrado." });
     res.json(usuario);
@@ -248,10 +262,27 @@ router.post("/:id/salvos/:prestadorId", exigirUsuario, (req, res) => {
         return res.status(403).json({ erro: "Só dá pra alterar a própria lista de salvos." });
     }
 
-    db.prepare(`
+    const info = db.prepare(`
         INSERT OR IGNORE INTO salvos (usuario_id, prestador_id, criado_em)
         VALUES (?, ?, ?)
     `).run(req.params.id, req.params.prestadorId, Date.now());
+
+    // info.changes === 0 quando já estava salvo (INSERT OR IGNORE não fez
+    // nada) — não notifica de novo por um "salvar" que na prática não
+    // aconteceu agora. dono_usuario_id !== req.usuario.id evita notificar
+    // alguém que salvou o próprio cadastro.
+    if (info.changes > 0) {
+        const prestador = db.prepare("SELECT dono_usuario_id, categoria FROM prestadores WHERE id = ?").get(req.params.prestadorId);
+        if (prestador && prestador.dono_usuario_id && prestador.dono_usuario_id !== req.usuario.id) {
+            criarNotificacao({
+                usuarioId: prestador.dono_usuario_id,
+                tipo: "prestador_salvo",
+                titulo: "Alguém salvou seu contato",
+                corpo: `Uma pessoa visitou seu perfil de ${prestador.categoria} e salvou seu contato.`,
+                link: `prestador:${req.params.prestadorId}`
+            });
+        }
+    }
 
     res.status(204).end();
 });

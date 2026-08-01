@@ -694,8 +694,14 @@ async function entrarComGoogle(credential) {
     usuarioLogado = true;
     perfilUsuarioCache = { nome: usuario.nome, email: usuario.email, telefone: usuario.telefone, avatarUrl: usuario.avatarUrl, avatarCustomizado: usuario.avatarCustomizado || 0 };
     localStorage.setItem(CHAVE_TOKEN_SESSAO, tokenSessao);
+    localStorage.setItem(CHAVE_USUARIO_ID, usuarioId); // faltava — restaurarSessao() exige essa chave no próximo refresh, senão sai no primeiro "if (!idSalvo...) return"
     renderizarPaginaPerfil();
     carregarIdsSalvos(); // não bloqueia o login — completa em segundo plano
+
+    // Guarda: só chama se 07-notificacoes.js estiver carregado. Liga o
+    // sino/polling assim que a sessão é confirmada, em vez de esperar até
+    // 30s pelo próximo tick do polling (ver ATRASO_POLLING_NOTIFICACOES_MS).
+    if (typeof aoMudarSessaoNotificacoes === "function") aoMudarSessaoNotificacoes();
 }
 
 function sair() {
@@ -707,6 +713,9 @@ function sair() {
     localStorage.removeItem(CHAVE_TOKEN_SESSAO);
     renderizarPaginaPerfil();
     fecharCadastroPrestador(); // por segurança, se a tela de cadastro estiver aberta ao deslogar
+
+    // Idem: desliga o sino/polling e esconde o botão na hora do logout.
+    if (typeof aoMudarSessaoNotificacoes === "function") aoMudarSessaoNotificacoes();
 
     // GIS lembra a última conta escolhida e tenta logar sozinho de novo
     // (One Tap) se não avisarmos que o usuário saiu de propósito.
@@ -747,6 +756,7 @@ async function restaurarSessao() {
     }
 
     renderizarPaginaPerfil();
+    if (typeof aoMudarSessaoNotificacoes === "function") aoMudarSessaoNotificacoes();
 }
 
 /* Overlay simples de tela cheia — mesmo chrome do CadastroOverlay, mas
@@ -792,13 +802,15 @@ function abrirEditarPerfil() {
     const overlay = abrirOverlayGenerico("Preferências da conta", `
         <div class="FotosPrestadorAvatarRow" style="margin-bottom:22px;">
             <label class="ProfileAvatarBig" id="editarPerfilAvatar"
-                style="position:relative; overflow:hidden; flex-shrink:0; cursor:pointer;">
+                style="position:relative; flex-shrink:0; cursor:pointer;">
                 <input type="file" accept="image/*" id="editarPerfilAvatarInput" hidden>
-                <span>${inicial}</span>
-                <img src="${avatarUrlAtual}" alt="" referrerpolicy="no-referrer"
-                    style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover;"
-                    onload="this.previousElementSibling.style.display='none';"
-                    onerror="this.remove();">
+                <div style="position:absolute; inset:0; border-radius:50%; overflow:hidden; display:flex; align-items:center; justify-content:center;">
+                    <span>${inicial}</span>
+                    <img src="${avatarUrlAtual}" alt="" referrerpolicy="no-referrer"
+                        style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover;"
+                        onload="this.previousElementSibling.style.display='none';"
+                        onerror="this.remove();">
+                </div>
                 <span style="position:absolute; right:-2px; bottom:-2px; width:26px; height:26px; border-radius:50%;
                     background-color:var(--ink); color:var(--paper); display:flex; align-items:center; justify-content:center;
                     border:2px solid var(--paper); pointer-events:none;">
@@ -1341,12 +1353,15 @@ async function enviarFotoPrestador(prestadorId, rota, arquivo) {
 // acontece o fetch falha com "Failed to fetch" (erro de rede genérico,
 // sem status HTTP, porque a plataforma corta a requisição antes de
 // qualquer resposta). Redimensiona pro maior lado ficar em no máximo
-// maxDimensao e recodifica como JPEG na qualidade pedida — de sobra já
-// que o backend ainda vai reprocessar (resize + webp) em cima disso de
-// qualquer forma. Usada hoje só no upload de foto de avaliação (o fluxo
-// de foto de prestador já passa por abrirCropImagem, que já gera um
-// blob pequeno via canvas antes de enviar).
-function comprimirImagemParaUpload(arquivo, maxDimensao = 1600, qualidade = 0.82) {
+// maxDimensao (1080 = "1080p", mesmo teto aplicado de novo do lado do
+// servidor em LARGURA_FOTO_AVALIACAO, ver routes/avaliacoes.js — os dois
+// concordam de propósito, esse aqui só evita subir bytes à toa numa
+// conexão de celular) e recodifica como JPEG na qualidade pedida — de
+// sobra já que o backend ainda vai reprocessar (resize + webp) em cima
+// disso de qualquer forma. Usada hoje só no upload de foto de avaliação
+// (o fluxo de foto de prestador já passa por abrirCropImagem, que já
+// gera um blob pequeno via canvas antes de enviar).
+function comprimirImagemParaUpload(arquivo, maxDimensao = 1080, qualidade = 0.82) {
     return new Promise((resolve, reject) => {
         const img = new Image();
         const urlObjeto = URL.createObjectURL(arquivo);
@@ -1589,32 +1604,23 @@ function atualizarAnelProgresso(barEl, pctEl, fracao) {
     pctEl.textContent = `${Math.round(fracao * 100)}%`;
 }
 
-/* ==========================================================================
-   PAINEL "AVALIAÇÕES PENDENTES" (dentro do overlay de Cadastro)
-   Busca a fila cega de cada prestador que o usuário logado é dono de
-   verdade (GET /prestadores/meus + GET .../avaliacoes/pendentes por
-   prestador). O prazo de expiração é resolvido por um job de verdade no
-   servidor (backend/src/jobs/expirarAvaliacoes.js) — não precisa rodar
-   nada aqui antes de listar, só mostrar a contagem regressiva informativa.
-   ========================================================================== */
-async function renderizarAvaliacoesPendentes() {
-    const section = document.getElementById("avaliacoesPendentesSection");
-    const lista = document.getElementById("avaliacoesPendentesList");
-    if (!section || !lista) return;
-
+// Busca a fila cega de TODOS os prestadores que o usuário logado é dono —
+// parte pura de rede, sem tocar em DOM nenhum, pra poder ser chamada tanto
+// daqui (overlay de cadastro) quanto do painel de notificações
+// (07-notificacoes.js). Retorna null em caso de falha (quem chamou decide
+// o que fazer — a tela de cadastro só desiste silenciosamente, o painel
+// de notificações mostra um aviso).
+async function buscarAvaliacoesPendentes() {
     let meusCadastros;
     try {
-        const resp = await fetch(`${API_BASE}/prestadores/meus`, {
-            headers: cabecalhosAuth()
-        });
+        const resp = await fetch(`${API_BASE}/prestadores/meus`, { headers: cabecalhosAuth() });
         if (!resp.ok) throw new Error(`GET /prestadores/meus respondeu ${resp.status}`);
         meusCadastros = await resp.json();
     } catch (erro) {
         console.warn("Não foi possível carregar seus cadastros pra checar pendências:", erro);
-        return;
+        return null;
     }
 
-    let pendentes = [];
     try {
         const porPrestador = await Promise.all(meusCadastros.map(async p => {
             const respFila = await fetch(`${API_BASE}/prestadores/${p.id}/avaliacoes/pendentes`, {
@@ -1624,25 +1630,25 @@ async function renderizarAvaliacoesPendentes() {
             const fila = await respFila.json();
             return fila.map(av => ({ ...av, prestadorId: p.id, prestadorNome: p.nome, prestadorCategoria: p.categoria }));
         }));
-        pendentes = porPrestador.flat().sort((a, b) => a.criadoEm - b.criadoEm);
+        const pendentes = porPrestador.flat().sort((a, b) => a.criadoEm - b.criadoEm);
+        return { pendentes, multiplosCadastros: meusCadastros.length > 1 };
     } catch (erro) {
         console.warn("Não foi possível carregar as avaliações pendentes:", erro);
+        return null;
     }
+}
 
-    if (pendentes.length === 0) {
-        section.hidden = true;
-        return;
-    }
-
-    section.hidden = false;
-
-    lista.innerHTML = pendentes.map(av => {
+// Só a marcação dos cards — mesmo HTML de sempre, extraído pra função
+// própria pra não duplicar entre o overlay de cadastro e o painel de
+// notificações.
+function montarHtmlAvaliacoesPendentes(pendentes, multiplosCadastros) {
+    return pendentes.map(av => {
         const diasRestantes = Math.max(0, Math.ceil((av.criadoEm + PRAZO_AVALIACAO_MS - Date.now()) / (24 * 60 * 60 * 1000)));
         const dataFormatada = new Date(av.criadoEm).toLocaleDateString("pt-BR");
-        const sobreQuem = meusCadastros.length > 1 ? ` · sobre ${av.prestadorNome}` : "";
+        const sobreQuem = multiplosCadastros ? ` · sobre ${av.prestadorNome}` : "";
 
         return `
-            <div class="AvaliacaoPendenteItem" data-id="${av.id}">
+            <div class="AvaliacaoPendenteItem" data-id="${av.id}" data-prestador-id="${av.prestadorId}">
                 <div class="AvaliacaoPendenteHeader">
                     <div class="AvaliacaoPendenteAutorRow">
                         ${avatarClienteHTML(av.autorNome, av.autorAvatarUrl, "AvaliacaoPendenteAvatar", av.autorUsuarioId, av.autorAvatarCustomizado)}
@@ -1670,8 +1676,18 @@ async function renderizarAvaliacoesPendentes() {
             </div>
         `;
     }).join("");
+}
 
-    lista.querySelectorAll(".AvaliacaoPendenteItem").forEach(item => {
+// Liga os cliques de Aceitar/Rejeitar de qualquer lista de cards já
+// montada por montarHtmlAvaliacoesPendentes() dentro de listaEl — mesma
+// lógica de sempre, só que agora recebe o container (em vez de assumir
+// #avaliacoesPendentesList fixo) e um callback aoDecidir(avaliacaoId)
+// disparado depois de aceitar OU rejeitar com sucesso, com o id da
+// avaliação decidida — pra quem chamou tanto atualizar a própria tela
+// quanto (no painel de notificações) marcar a notificação correspondente
+// como lida.
+function ligarHandlersAvaliacoesPendentes(listaEl, aoDecidir) {
+    listaEl.querySelectorAll(".AvaliacaoPendenteItem").forEach(item => {
         const id = item.dataset.id;
 
         item.querySelector(".AvaliacaoPendenteAceitar").addEventListener("click", async (event) => {
@@ -1684,7 +1700,7 @@ async function renderizarAvaliacoesPendentes() {
                 if (!resp.ok) throw new Error(`POST .../aceitar respondeu ${resp.status}`);
 
                 await carregarPrestadores(); // nota do prestador mudou, recarrega
-                renderizarAvaliacoesPendentes();
+                aoDecidir(id);
             } catch (erro) {
                 console.warn("Não foi possível aceitar a avaliação:", erro);
                 event.target.disabled = false;
@@ -1714,7 +1730,7 @@ async function renderizarAvaliacoesPendentes() {
                 });
                 if (!resp.ok) throw new Error(`POST .../rejeitar respondeu ${resp.status}`);
 
-                renderizarAvaliacoesPendentes();
+                aoDecidir(id);
             } catch (erro) {
                 console.warn("Não foi possível rejeitar a avaliação:", erro);
                 event.target.disabled = false;
@@ -1723,7 +1739,60 @@ async function renderizarAvaliacoesPendentes() {
     });
 }
 
-async function abrirCadastroPrestador() {
+/* ==========================================================================
+   PAINEL "AVALIAÇÕES PENDENTES" (dentro do overlay de Cadastro)
+   Busca a fila cega de cada prestador que o usuário logado é dono de
+   verdade (GET /prestadores/meus + GET .../avaliacoes/pendentes por
+   prestador). O prazo de expiração é resolvido por um job de verdade no
+   servidor (backend/src/jobs/expirarAvaliacoes.js) — não precisa rodar
+   nada aqui antes de listar, só mostrar a contagem regressiva informativa.
+   ========================================================================== */
+async function renderizarAvaliacoesPendentes() {
+    const section = document.getElementById("avaliacoesPendentesSection");
+    const lista = document.getElementById("avaliacoesPendentesList");
+    if (!section || !lista) return;
+
+    const dados = await buscarAvaliacoesPendentes();
+    if (!dados) return;
+    const { pendentes, multiplosCadastros } = dados;
+
+    if (pendentes.length === 0) {
+        section.hidden = true;
+        return;
+    }
+
+    section.hidden = false;
+    lista.innerHTML = montarHtmlAvaliacoesPendentes(pendentes, multiplosCadastros);
+    ligarHandlersAvaliacoesPendentes(lista, async () => {
+        await renderizarAvaliacoesPendentes();
+        // Notificações e fila cega são fontes independentes (ver
+        // 07-notificacoes.js) — decidir por aqui também precisa refletir
+        // lá, caso o painel de notificações esteja aberto ao mesmo tempo
+        // em outra aba/instância.
+        if (typeof atualizarBadgeNotificacoes === "function") atualizarBadgeNotificacoes();
+    });
+}
+
+// Rola até a seção de avaliações pendentes e pisca as pendências de UM
+// prestador específico — usado quando se chega aqui pela notificação do
+// sino (link "avaliacoes-pendentes:<id>", ver aoTocarNotificacao() em
+// 07-notificacoes.js). Sem isso, quem tem mais de um cadastro caía na
+// lista inteira sem saber qual item era o da notificação que tocou.
+function focarAvaliacoesPendentesDoPrestador(prestadorId) {
+    const section = document.getElementById("avaliacoesPendentesSection");
+    if (!section || section.hidden) return; // pode já ter sido decidida/expirado entre a notificação e o clique
+
+    const itens = document.querySelectorAll(`.AvaliacaoPendenteItem[data-prestador-id="${prestadorId}"]`);
+    if (itens.length === 0) return;
+
+    itens[0].scrollIntoView({ behavior: "smooth", block: "center" });
+    itens.forEach(item => {
+        item.classList.add("is-focado");
+        item.addEventListener("animationend", () => item.classList.remove("is-focado"), { once: true });
+    });
+}
+
+async function abrirCadastroPrestador(prestadorIdFoco = null) {
     // Guarda de segurança: mesmo que o botão só apareça pra quem está
     // "logado", a função em si também checa — não depende só da UI escondida.
     if (!usuarioLogado) return;
@@ -2524,7 +2593,9 @@ async function abrirCadastroPrestador() {
     abrirFormularioEdicaoRef = abrirFormulario;
     registrarAberturaOverlay(fecharCadastroPrestador);
     renderizarMeusCadastros();
-    renderizarAvaliacoesPendentes();
+    renderizarAvaliacoesPendentes().then(() => {
+        if (prestadorIdFoco) focarAvaliacoesPendentesDoPrestador(prestadorIdFoco);
+    });
 }
 
 function iniciarPaginaPerfil() {
@@ -3101,10 +3172,16 @@ async function fotosClientesPrestador(prestadorId) {
     }
 }
 
-// Lightbox simples pra abrir a foto em tela cheia ao tocar na galeria —
-// mesmo espírito do ProviderProfile (overlay criado/destruído sob
-// demanda), só que por cima dele (z-index maior, ver style.css).
+// Lightbox de tela cheia — z-index acima do .ProviderProfile (30), já
+// que abre por cima dele. É um carrossel: abre na foto tocada, mas dá
+// pra arrastar (touch no celular, mouse no desktop) pra esquerda/direita
+// entre TODAS as fotos publicadas desse prestador sem fechar e reabrir —
+// mesmo gesto de "arrastar pra trocar" das stories do Instagram/
+// AliExpress. lightboxFotos/lightboxIndice guardam o estado do carrossel
+// enquanto ele está aberto (limpos de novo em fecharLightbox).
 let lightboxEl = null;
+let lightboxFotos = [];
+let lightboxIndice = 0;
 
 function fecharLightbox(viaPopstate) {
     registrarFechamentoOverlay(fecharLightbox, viaPopstate);
@@ -3112,10 +3189,24 @@ function fecharLightbox(viaPopstate) {
         lightboxEl.remove();
         lightboxEl = null;
     }
+    lightboxFotos = [];
+    lightboxIndice = 0;
 }
 
-function abrirLightbox(src, autor) {
+// Preenche a tela inteira (foto mestre já vem 9:19.5 do backend, ver
+// LARGURA/ALTURA_FOTO_AVALIACAO em routes/avaliacoes.js) e mostra nota +
+// comentário da avaliação sobrepostos por cima da foto, na parte de
+// baixo — mesmo estilo "story" do AliExpress. `fotos` é a lista INTEIRA
+// vinda de fotosClientesPrestador (não só a foto tocada) e `indiceInicial`
+// é a posição dela nessa lista — o carrossel (arrastarLightbox abaixo) só
+// navega dentro dessa mesma lista, então cada slide já nasce pronto no
+// DOM em vez de recarregar a foto a cada arrasto.
+function abrirLightbox(fotos, indiceInicial) {
     fecharLightbox();
+    if (!fotos || fotos.length === 0) return;
+
+    lightboxFotos = fotos;
+    lightboxIndice = Math.min(Math.max(indiceInicial, 0), fotos.length - 1);
 
     const overlay = document.createElement("div");
     overlay.className = "PhotoLightbox";
@@ -3126,20 +3217,148 @@ function abrirLightbox(src, autor) {
                     stroke-linecap="round" stroke-linejoin="round"></path>
             </svg>
         </button>
-        <img class="PhotoLightboxImg" src="${src}" alt="Foto de serviço enviada por ${autor}"
-            onerror="this.onerror=null; this.src='${CAPA_PLACEHOLDER}';">
-        <div class="PhotoLightboxCaption">Enviada por ${autor}</div>
+        ${fotos.length > 1 ? `
+            <div class="PhotoLightboxDots">
+                ${fotos.map(() => `<span class="PhotoLightboxDot"></span>`).join("")}
+            </div>
+        ` : ""}
+        <div class="PhotoLightboxTrack">
+            ${fotos.map(foto => {
+                const autorSeguro = escapeHTML(foto.autor || "");
+                const comentarioSeguro = foto.comentario ? escapeHTML(foto.comentario) : "";
+                const notaNumero = Number(foto.nota) || 0;
+                return `
+                    <div class="PhotoLightboxSlide">
+                        <img class="PhotoLightboxImg" src="${foto.src}" alt="Foto de serviço enviada por ${autorSeguro}"
+                            draggable="false" onerror="this.onerror=null; this.src='${CAPA_PLACEHOLDER}';">
+                        <div class="PhotoLightboxCaption">
+                            <div class="PhotoLightboxAutor">${autorSeguro}</div>
+                            ${notaNumero > 0 ? `<div class="PhotoLightboxStars">${"★".repeat(notaNumero)}${"☆".repeat(5 - notaNumero)}</div>` : ""}
+                            ${comentarioSeguro ? `<div class="PhotoLightboxComentario">${comentarioSeguro}</div>` : ""}
+                        </div>
+                    </div>
+                `;
+            }).join("")}
+        </div>
     `;
 
+    const track = overlay.querySelector(".PhotoLightboxTrack");
+
     overlay.querySelector(".PhotoLightboxClose").addEventListener("click", () => fecharLightbox());
-    // clicar no fundo escuro (fora da foto/legenda) também fecha
-    overlay.addEventListener("click", (event) => {
-        if (event.target === overlay) fecharLightbox();
-    });
+    configurarArrasteLightbox(overlay, track);
+    posicionarLightboxTrack(overlay, track, false);
 
     document.body.appendChild(overlay);
     lightboxEl = overlay;
     registrarAberturaOverlay(fecharLightbox);
+}
+
+// Move o track pro slide de lightboxIndice atual (com ou sem animação,
+// conforme `animar`) e acende a bolinha correspondente no indicador.
+function posicionarLightboxTrack(overlay, track, animar) {
+    track.style.transition = animar ? "transform 0.25s ease" : "none";
+    track.style.transform = `translateX(-${lightboxIndice * 100}%)`;
+
+    overlay.querySelectorAll(".PhotoLightboxDot").forEach((ponto, indice) => {
+        ponto.classList.toggle("is-active", indice === lightboxIndice);
+    });
+}
+
+// Arrastar (pointerdown/move/up cobre touch e mouse com a mesma API) pra
+// trocar de foto sem fechar o overlay. Segue o dedo/cursor em tempo real
+// (translateX = posição do slide atual, ajustada pelo quanto já foi
+// arrastado); ao soltar, se passou de 1/3 da largura da tela OU o gesto
+// foi rápido o bastante (mesmo arrasto curto, mas "de flick"), avança ou
+// volta um slide — senão volta pro slide atual com uma animação de mola.
+// Um toque/clique que NÃO arrastou nada (deltaX pequeno) não faz NADA —
+// de propósito: a única forma de fechar é o botão X, arrastar é a única
+// forma de trocar de foto. Antes um toque parado fechava o lightbox
+// (mesmo comportamento de "tocar fecha" de app de foto simples), mas
+// isso conflitava com qualquer toque acidental na área da legenda/foto
+// enquanto a pessoa só queria olhar — ver conversa sobre isso.
+function configurarArrasteLightbox(overlay, track) {
+    let arrastando = false;
+    let inicioX = 0;
+    let deltaX = 0;
+    let inicioTempo = 0;
+
+    function aoMover(evento) {
+        if (!arrastando) return;
+        deltaX = evento.clientX - inicioX;
+        const largura = overlay.clientWidth || 1;
+        const percentual = (deltaX / largura) * 100;
+        track.style.transform = `translateX(calc(-${lightboxIndice * 100}% + ${percentual}%))`;
+    }
+
+    function aoSoltar() {
+        if (!arrastando) return;
+        arrastando = false;
+        window.removeEventListener("pointermove", aoMover);
+        window.removeEventListener("pointerup", aoSoltar);
+        window.removeEventListener("pointercancel", aoSoltar);
+
+        const largura = overlay.clientWidth || 1;
+        const duracaoMs = Date.now() - inicioTempo;
+        const velocidade = Math.abs(deltaX) / Math.max(duracaoMs, 1); // px/ms
+        const passouLimite = Math.abs(deltaX) > largura / 3 || velocidade > 0.5;
+
+        if (Math.abs(deltaX) <= 10) {
+            // Gesto foi essencialmente um toque parado, não um arrasto —
+            // NÃO faz nada (nem fecha, nem troca de foto). Só desfaz
+            // qualquer micro-deslocamento visual que o dedo possa ter
+            // causado. Fechar é só pelo botão X; a única ação de toque
+            // que existe aqui dentro é arrastar pra trocar de imagem.
+            posicionarLightboxTrack(overlay, track, false);
+            return;
+        }
+
+        if (passouLimite && deltaX < 0 && lightboxIndice < lightboxFotos.length - 1) {
+            lightboxIndice += 1;
+        } else if (passouLimite && deltaX > 0 && lightboxIndice > 0) {
+            lightboxIndice -= 1;
+        }
+
+        posicionarLightboxTrack(overlay, track, true);
+    }
+
+    overlay.addEventListener("pointerdown", (evento) => {
+        if (evento.pointerType === "mouse" && evento.button !== 0) return; // ignora botão direito/meio
+        if (evento.target.closest(".PhotoLightboxClose")) return; // não inicia arrasto tocando no X
+        arrastando = true;
+        inicioX = evento.clientX;
+        deltaX = 0;
+        inicioTempo = Date.now();
+        track.style.transition = "none";
+        window.addEventListener("pointermove", aoMover);
+        window.addEventListener("pointerup", aoSoltar);
+        window.addEventListener("pointercancel", aoSoltar);
+    });
+
+    // Setas do teclado — só faz sentido ter foco de teclado no desktop,
+    // onde não existe gesto de arrastar; ArrowRight avança, ArrowLeft
+    // volta, mesmo padrão de qualquer carrossel/story conhecido.
+    function aoTeclado(evento) {
+        if (evento.key === "ArrowRight" && lightboxIndice < lightboxFotos.length - 1) {
+            lightboxIndice += 1;
+            posicionarLightboxTrack(overlay, track, true);
+        } else if (evento.key === "ArrowLeft" && lightboxIndice > 0) {
+            lightboxIndice -= 1;
+            posicionarLightboxTrack(overlay, track, true);
+        }
+    }
+    document.addEventListener("keydown", aoTeclado);
+
+    // Some junto quando o lightbox fecha por qualquer caminho (X, arrasto
+    // de "toque parado", botão física de voltar) — sem isso o listener
+    // de teclado ficaria vazando pra sempre, mexendo num overlay que já
+    // nem existe mais.
+    const observadorRemocao = new MutationObserver(() => {
+        if (!document.body.contains(overlay)) {
+            document.removeEventListener("keydown", aoTeclado);
+            observadorRemocao.disconnect();
+        }
+    });
+    observadorRemocao.observe(document.body, { childList: true });
 }
 
 /* ==========================================================================
@@ -3188,26 +3407,29 @@ function abrirAvaliarPrestador(prestador) {
             </label>
 
             <div class="CadastroField">
-                <span class="CadastroLabel">Foto do serviço (opcional)</span>
-                <input type="file" name="foto" id="avaliarFotoInput" accept="image/*" hidden>
-                <div class="AvaliarFotoWrap" id="avaliarFotoWrap">
-                    <label for="avaliarFotoInput" class="AvaliarFotoBtn" id="avaliarFotoBtn">
-                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M4 7h3l2-2h6l2 2h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Z"
-                                stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path>
-                            <circle cx="12" cy="13" r="3.2" stroke="currentColor" stroke-width="1.6"></circle>
-                        </svg>
-                        Adicionar foto
-                    </label>
-                    <div class="AvaliarFotoPreview" id="avaliarFotoPreview" hidden>
-                        <img id="avaliarFotoPreviewImg" alt="Prévia da foto selecionada">
-                        <span id="avaliarFotoPreviewFallback" class="AvaliarFotoPreviewFallback" hidden style="font-size: 13px; color: var(--muted, #6b7280); padding: 8px 4px;">Foto selecionada (sem prévia)</span>
-                        <button type="button" class="AvaliarFotoRemover" id="avaliarFotoRemover" aria-label="Remover foto selecionada">
-                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                            </svg>
-                        </button>
-                    </div>
+                <span class="CadastroLabel">Fotos do serviço (opcional, até 3)</span>
+                <div class="AvaliarFotosGrade" id="avaliarFotosGrade">
+                    ${[0, 1, 2].map(i => `
+                        <div class="AvaliarFotoSlot">
+                            <input type="file" accept="image/*" id="avaliarFotoInput${i}" hidden>
+                            <label for="avaliarFotoInput${i}" class="AvaliarFotoBtn" id="avaliarFotoBtn${i}" aria-label="Adicionar foto ${i + 1}">
+                                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M4 7h3l2-2h6l2 2h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Z"
+                                        stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path>
+                                    <circle cx="12" cy="13" r="3.2" stroke="currentColor" stroke-width="1.6"></circle>
+                                </svg>
+                            </label>
+                            <div class="AvaliarFotoPreview" id="avaliarFotoPreview${i}" hidden>
+                                <img id="avaliarFotoPreviewImg${i}" alt="Prévia da foto ${i + 1} selecionada">
+                                <span id="avaliarFotoPreviewFallback${i}" class="AvaliarFotoPreviewFallback" hidden>Sem prévia</span>
+                                <button type="button" class="AvaliarFotoRemover" id="avaliarFotoRemover${i}" aria-label="Remover foto ${i + 1}">
+                                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    `).join("")}
                 </div>
             </div>
 
@@ -3221,7 +3443,7 @@ function abrirAvaliarPrestador(prestador) {
             </svg>
             <div>
                 <div class="CadastroSuccessTitle">Avaliação enviada!</div>
-                <div class="CadastroSuccessText">Fica em análise até ${prestador.nome.split(" ")[0]} responder — ou até 7 dias, se não responder (aí publica sozinha).</div>
+                <div class="CadastroSuccessText">Fica em análise até ${prestador.nome.split(" ")[0]} responder — ou até 7 dias, se não responder será descartado.</div>
             </div>
         </div>
     `);
@@ -3241,63 +3463,76 @@ function abrirAvaliarPrestador(prestador) {
         });
     });
 
-    // ---- Campo de foto: seleção, preview e remoção ----
-    // Fica só no cliente até o submit (nenhum upload acontece aqui) — o
-    // arquivo escolhido viaja junto no FormData do envio final. Validar
-    // tipo/tamanho aqui é só pra dar feedback rápido; o backend valida de
-    // novo de qualquer forma (nunca confiar só no que o navegador manda).
-    const fotoInput = overlay.querySelector("#avaliarFotoInput");
-    const fotoBtn = overlay.querySelector("#avaliarFotoBtn");
-    const fotoPreview = overlay.querySelector("#avaliarFotoPreview");
-    const fotoPreviewImg = overlay.querySelector("#avaliarFotoPreviewImg");
-    const fotoPreviewFallback = overlay.querySelector("#avaliarFotoPreviewFallback");
-    const fotoRemover = overlay.querySelector("#avaliarFotoRemover");
-    let fotoPreviewUrl = null;
+    // ---- Campos de foto (3 slots): seleção, preview e remoção ----
+    // Ficam só no cliente até o submit (nenhum upload acontece aqui) — os
+    // arquivos escolhidos viajam juntos no FormData do envio final, todos
+    // sob o campo "fotos" (plural — ver receberFotosOpcionais em
+    // avaliacoes.js, que aceita até 3). Validar tipo aqui é só pra dar
+    // feedback rápido; o backend valida de novo de qualquer forma (nunca
+    // confiar só no que o navegador manda).
+    //
+    // criarSlotFoto(i) monta UM slot independente — os 3 são idênticos em
+    // comportamento, só reaproveitados por índice em vez de triplicar o
+    // código à mão. Retorna um getter pro arquivo atual (ou null), que o
+    // submit usa pra montar o FormData.
+    function criarSlotFoto(indice) {
+        const input = overlay.querySelector(`#avaliarFotoInput${indice}`);
+        const btn = overlay.querySelector(`#avaliarFotoBtn${indice}`);
+        const preview = overlay.querySelector(`#avaliarFotoPreview${indice}`);
+        const previewImg = overlay.querySelector(`#avaliarFotoPreviewImg${indice}`);
+        const previewFallback = overlay.querySelector(`#avaliarFotoPreviewFallback${indice}`);
+        const remover = overlay.querySelector(`#avaliarFotoRemover${indice}`);
+        let previewUrl = null;
 
-    function limparFotoSelecionada() {
-        fotoInput.value = "";
-        if (fotoPreviewUrl) {
-            URL.revokeObjectURL(fotoPreviewUrl);
-            fotoPreviewUrl = null;
+        function limpar() {
+            input.value = "";
+            if (previewUrl) {
+                URL.revokeObjectURL(previewUrl);
+                previewUrl = null;
+            }
+            preview.hidden = true;
+            btn.hidden = false;
         }
-        fotoPreview.hidden = true;
-        fotoBtn.hidden = false;
+
+        // Se o navegador não conseguir decodificar o arquivo pra prévia
+        // (caso comum: foto tirada em HEIC, formato padrão da câmera do
+        // iPhone — Chrome/Firefox/Android não sabem exibir HEIC num
+        // <img>, só o Safari), mostra um aviso simples em vez de deixar o
+        // ícone de imagem quebrada. O arquivo continua selecionado
+        // normalmente: a falta de prévia não impede o envio, quem decide
+        // se manda ou não é comprimirImagemParaUpload() no submit.
+        previewImg.addEventListener("error", () => {
+            previewImg.hidden = true;
+            previewFallback.hidden = false;
+        });
+
+        input.addEventListener("change", () => {
+            const arquivo = input.files[0];
+            if (!arquivo) return;
+
+            if (!arquivo.type.startsWith("image/")) {
+                erroEl.textContent = "Escolha um arquivo de imagem (JPG, PNG, WEBP...).";
+                erroEl.hidden = false;
+                limpar();
+                return;
+            }
+
+            erroEl.hidden = true;
+            previewImg.hidden = false;
+            previewFallback.hidden = true;
+            if (previewUrl) URL.revokeObjectURL(previewUrl);
+            previewUrl = URL.createObjectURL(arquivo);
+            previewImg.src = previewUrl;
+            preview.hidden = false;
+            btn.hidden = true;
+        });
+
+        remover.addEventListener("click", limpar);
+
+        return { obterArquivo: () => input.files[0] || null };
     }
 
-    // Se o navegador não conseguir decodificar o arquivo pra prévia (caso
-    // comum: foto tirada em HEIC, formato padrão da câmera do iPhone —
-    // Chrome/Firefox/Android não sabem exibir HEIC num <img>, só o
-    // Safari), mostra um aviso simples em vez de deixar o ícone de
-    // imagem quebrada. O arquivo continua selecionado normalmente: a
-    // falta de prévia não impede o envio, quem decide se manda ou não é
-    // comprimirImagemParaUpload() no submit (ver mais abaixo).
-    fotoPreviewImg.addEventListener("error", () => {
-        fotoPreviewImg.hidden = true;
-        fotoPreviewFallback.hidden = false;
-    });
-
-    fotoInput.addEventListener("change", () => {
-        const arquivo = fotoInput.files[0];
-        if (!arquivo) return;
-
-        if (!arquivo.type.startsWith("image/")) {
-            erroEl.textContent = "Escolha um arquivo de imagem (JPG, PNG, WEBP...).";
-            erroEl.hidden = false;
-            limparFotoSelecionada();
-            return;
-        }
-
-        erroEl.hidden = true;
-        fotoPreviewImg.hidden = false;
-        fotoPreviewFallback.hidden = true;
-        if (fotoPreviewUrl) URL.revokeObjectURL(fotoPreviewUrl);
-        fotoPreviewUrl = URL.createObjectURL(arquivo);
-        fotoPreviewImg.src = fotoPreviewUrl;
-        fotoPreview.hidden = false;
-        fotoBtn.hidden = true;
-    });
-
-    fotoRemover.addEventListener("click", limparFotoSelecionada);
+    const slotsFoto = [0, 1, 2].map(criarSlotFoto);
 
     form.addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -3310,30 +3545,38 @@ function abrirAvaliarPrestador(prestador) {
             return;
         }
 
-        // FormData em vez de JSON: precisa levar o arquivo (se houver)
+        // FormData em vez de JSON: precisa levar os arquivos (se houver)
         // junto com nota/comentário no mesmo POST multipart. Não define
         // Content-Type manualmente — o navegador monta o header com o
         // boundary certo sozinho; fixar "multipart/form-data" na mão
         // quebra o parsing porque falta o boundary.
         const dadosForm = new FormData(form);
         dadosForm.set("nota", String(nota));
-        if (fotoInput.files[0]) {
-            // Recomprime antes de mandar (ver comprimirImagemParaUpload) —
-            // evita "Failed to fetch" por estourar o limite de corpo da
-            // requisição da Vercel com foto de celular sem compressão. Se
-            // a compressão falhar (ex: HEIC do iPhone que o Canvas/Image
-            // do navegador não decodifica), manda o arquivo original em
-            // vez de bloquear o envio — o backend (sharp) tem mais chance
-            // de dar conta do formato do que travar a pessoa aqui.
+
+        // Cada slot preenchido vira um campo "fotos" (mesmo nome
+        // repetido — é assim que multer.array("fotos", 3) espera
+        // receber múltiplos arquivos, ver receberFotosOpcionais em
+        // avaliacoes.js). Slots vazios simplesmente não entram no
+        // FormData, não manda posição "em branco" nenhuma. Recomprime
+        // cada arquivo antes de mandar (ver comprimirImagemParaUpload) —
+        // evita "Failed to fetch" por estourar o limite de corpo da
+        // requisição da Vercel com foto de celular sem compressão. Se a
+        // compressão de alguma falhar (ex: HEIC do iPhone que o
+        // Canvas/Image do navegador não decodifica), manda o arquivo
+        // original em vez de bloquear o envio inteiro — o backend
+        // (sharp) tem mais chance de dar conta do formato do que travar
+        // a pessoa aqui.
+        for (const slot of slotsFoto) {
+            const arquivo = slot.obterArquivo();
+            if (!arquivo) continue;
+
             try {
-                const fotoComprimida = await comprimirImagemParaUpload(fotoInput.files[0]);
-                dadosForm.set("foto", fotoComprimida, "foto.jpg");
+                const fotoComprimida = await comprimirImagemParaUpload(arquivo);
+                dadosForm.append("fotos", fotoComprimida, "foto.jpg");
             } catch (erro) {
-                console.warn("Não foi possível comprimir a foto no navegador, enviando original:", erro);
-                dadosForm.set("foto", fotoInput.files[0]);
+                console.warn("Não foi possível comprimir uma foto no navegador, enviando original:", erro);
+                dadosForm.append("fotos", arquivo);
             }
-        } else {
-            dadosForm.delete("foto"); // opcional: não manda campo vazio
         }
 
         botao.disabled = true;
@@ -3429,11 +3672,12 @@ async function abrirPerfilPrestador(prestador) {
 
     slot("galeria").innerHTML = fotos.length > 0 ? `
         <div class="ProviderProfileGallery">
-            ${fotos.map(foto => `
-                <button type="button" class="ProviderProfileGalleryItem" data-src="${foto.src}" data-autor="${foto.autor}">
-                    <img src="${foto.src}" alt="Foto de serviço enviada por ${foto.autor}"
+            ${fotos.map(grupo => `
+                <button type="button" class="ProviderProfileGalleryItem">
+                    <img src="${grupo.fotos[0]}" alt="Foto de serviço enviada por ${grupo.autor}"
                         onerror="this.onerror=null; this.src='${CAPA_PLACEHOLDER}';">
-                    <span class="ProviderProfileGalleryCaption">${foto.autor}</span>
+                    ${grupo.fotos.length > 1 ? `<span class="ProviderProfileGalleryCount">+${grupo.fotos.length}</span>` : ""}
+                    <span class="ProviderProfileGalleryCaption">${grupo.autor}</span>
                 </button>
             `).join("")}
         </div>
@@ -3484,9 +3728,25 @@ async function abrirPerfilPrestador(prestador) {
         abrirAvaliarPrestador(prestador);
     });
 
-    overlay.querySelectorAll(".ProviderProfileGalleryItem").forEach(item => {
+    // Lista GLOBAL e contínua, achatada a partir dos grupos por
+    // avaliação — as fotos da mesma avaliação ficam seguidas (mesma
+    // legenda repetida nelas), mas arrastar na última foto de uma
+    // avaliação continua pra primeira foto da PRÓXIMA, sem travar dentro
+    // do grupo. `indiceInicioGrupo[i]` guarda em que posição dessa lista
+    // achatada o grupo `i` começa, pra cada tile da galeria abrir o
+    // lightbox já na foto certa (não sempre em 0).
+    const slidesGaleria = [];
+    const indiceInicioGrupo = [];
+    fotos.forEach(grupo => {
+        indiceInicioGrupo.push(slidesGaleria.length);
+        grupo.fotos.forEach(src => {
+            slidesGaleria.push({ src, autor: grupo.autor, comentario: grupo.comentario, nota: grupo.nota });
+        });
+    });
+
+    overlay.querySelectorAll(".ProviderProfileGalleryItem").forEach((item, indice) => {
         item.addEventListener("click", () => {
-            abrirLightbox(item.dataset.src, item.dataset.autor);
+            abrirLightbox(slidesGaleria, indiceInicioGrupo[indice]);
         });
     });
 
@@ -3926,7 +4186,7 @@ async function renderizarPaginaSalvos() {
         idsSalvosSet = new Set(salvos.map(p => String(p.id))); // realinha o cache com a fonte de verdade
     } catch (erro) {
         console.warn("Não foi possível carregar a lista de salvos:", erro);
-        container.innerHTML = `<div class="CadastroHint">Não foi possível carregar seus salvos agora. Tente reabrir esta aba.</div>`;
+        container.innerHTML = `<div class="CadastroHint">Não foi possível carregar seus contatos salvos agora. Tente reabrir esta aba.</div>`;
         return;
     }
 
@@ -3937,7 +4197,7 @@ async function renderizarPaginaSalvos() {
                     <path d="M6 3.5h12a1 1 0 0 1 1 1V21l-7-4.2L5 21V4.5a1 1 0 0 1 1-1Z"
                         stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path>
                 </svg>
-                <div class="ResultsEmptyText">Você ainda não salvou nenhum prestador.</div>
+                <div class="ResultsEmptyText">Você ainda não salvou nenhum contato.</div>
                 <div class="ResultsEmptyHint">Abra o perfil de um prestador e toque em "Salvar na lista".</div>
             </div>
         `;

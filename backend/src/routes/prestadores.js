@@ -326,12 +326,12 @@ const SUFIXOS_FOTOS_CAPA = ["", "-2", "-3", "-4"];
 
 function removerFotosCapaAntigas(id) {
     SUFIXOS_FOTOS_CAPA.forEach((sufixo) => {
-        fs.rm(path.join(UPLOADS_DIR_CAPA, `${id}${sufixo}.webp`), { force: true }, () => {});
+        fs.rm(path.join(UPLOADS_DIR_CAPA, `${id}${sufixo}.webp`), { force: true }, () => { });
     });
 }
 
 function removerVideoCapaAntigo(id) {
-    fs.rm(path.join(UPLOADS_DIR_CAPA, `${id}.mp4`), { force: true }, () => {});
+    fs.rm(path.join(UPLOADS_DIR_CAPA, `${id}.mp4`), { force: true }, () => { });
 }
 
 const uploadFotoPrestador = multer({
@@ -414,7 +414,7 @@ router.post("/:id/foto-capa/:indice", receberFotoPrestador, exigirUsuario, exigi
 // Vídeo sempre toca mudo (autoplay+muted+loop, ver script.js) — largura
 // máxima e qualidade pensadas pro tamanho real de exibição (popup do mapa
 // e capa do perfil, nunca tela cheia), não pra qualidade de arquivo original.
-const LARGURA_MAXIMA_VIDEO_CAPA = 720; // px — só reduz se for mais largo, nunca aumenta
+const LARGURA_MAXIMA_VIDEO_CAPA = 1080; // px — só reduz se for mais largo, nunca aumenta
 
 // Recebe o buffer bruto do upload e grava a versão comprimida direto no
 // destino final. ffmpeg trabalha melhor com um arquivo real de entrada do
@@ -428,16 +428,20 @@ function comprimirVideoCapa(bufferOriginal, destinoFinal) {
         fs.writeFile(tempEntrada, bufferOriginal, (erro) => {
             if (erro) return reject(erro);
 
-            const limpar = () => fs.rm(tempEntrada, { force: true }, () => {});
+            const limpar = () => fs.rm(tempEntrada, { force: true }, () => { });
 
             ffmpeg(tempEntrada)
                 .videoCodec("libx264")
-                .noAudio() // sempre toca mudo — descartar o áudio economiza espaço sem perder nada da experiência
+                //.noAudio() // sempre toca mudo — descartar o áudio economiza espaço sem perder nada da experiência
                 .outputOptions([
-                    "-crf 28", // qualidade/tamanho — 28 é discreto o bastante pro tamanho de exibição real (popup/capa, nunca tela cheia)
-                    "-preset fast", // troca um pouco de compressão por velocidade — roda síncrono dentro da request
-                    "-movflags +faststart", // moov atom no início do arquivo: o vídeo começa a tocar sem esperar baixar tudo
-                    `-vf scale='min(${LARGURA_MAXIMA_VIDEO_CAPA},iw)':-2` // só reduz se for mais largo que o limite; -2 mantém altura par (exigência do H.264)
+                    "-crf 20",
+                    "-preset slow",
+                    "-profile:v high",
+                    "-maxrate 1500k",
+                    "-bufsize 7000k",
+                    "-r 30",
+                    "-movflags +faststart",
+                    `-vf scale='min(${LARGURA_MAXIMA_VIDEO_CAPA},iw)':-2`
                 ])
                 .on("error", (erroFfmpeg) => { limpar(); reject(erroFfmpeg); })
                 .on("end", () => { limpar(); resolve(); })

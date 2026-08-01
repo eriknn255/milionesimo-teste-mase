@@ -12,7 +12,7 @@
 
             <div class="CadastroMeusSection" id="cadastroMeusSection">
                 <div class="CadastroMeusHeader">
-                    <div class="CadastroMeusTitle">Seus cadastros</div>
+                    <div class="CadastroMeusTitle">meus Serviços</div>
                     <!-- texto preenchido via JS: depende de LIMITE_PRESTADORES_POR_CONTA (constantes.js) -->
                     <div class="CadastroMeusContador" id="cadastroMeusContador"></div>
                 </div>
@@ -27,14 +27,14 @@
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
                     </svg>
-                    Cadastrar novo prestador
+                    Cadastrar novo serviço
                 </button>
                 <!-- texto preenchido via JS: também depende de LIMITE_PRESTADORES_POR_CONTA -->
                 <div class="CadastroHint" id="cadastroLimiteHint" hidden></div>
             </div>
 
             <div class="CadastroFormSection" id="cadastroFormSection" hidden>
-                <div class="CadastroFormTitulo" id="cadastroFormTitulo">Cadastrar novo prestador</div>
+                <div class="CadastroFormTitulo" id="cadastroFormTitulo">Cadastrar novo serviço</div>
                 <div class="CadastroStepsHeader">
                     <div class="CadastroStepsDots" id="cadastroStepsDots">
                         <span class="CadastroStepDot" data-passo="1"></span>
@@ -63,7 +63,7 @@
                             <textarea name="descricao" class="CadastroInput CadastroTextarea" rows="4" maxlength="1000"
                                 placeholder="Conte um pouco sobre seu trabalho, experiência ou diferenciais..."></textarea>
                         </label>
-                        <div class="CadastroHint">Aparece na seção "Sobre" do seu perfil público — ajuda quem está decidindo se vai te chamar. Use *asterisco* pra <strong>negrito</strong> e _sublinhado_ pra <em>itálico</em>.</div>
+                        <div class="CadastroHint">Aparece na seção "Sobre" do seu perfil público — ajuda quem está decidindo se vai te chamar. Use *asterisco* pra <strong>negrito</strong> e #Hashtag# pra <em>itálico</em>.</div>
                     </div>
 
                     <div class="CadastroStep" data-passo="2" hidden>
