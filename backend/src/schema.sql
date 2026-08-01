@@ -76,5 +76,28 @@ CREATE TABLE IF NOT EXISTS salvos (
     FOREIGN KEY (prestador_id) REFERENCES prestadores(id) ON DELETE CASCADE
 );
 
+-- Notificações in-app — "sino" no header. Cada linha é um evento já
+-- acontecido (avaliação nova pra revisar, avaliação decidida, prestador
+-- salvo por alguém) endereçado a UM usuário específico. `link` guarda uma
+-- referência leve tipo "tipo:id" (ex: "prestador:7", "avaliacoes-pendentes:7")
+-- que o front interpreta pra saber que tela abrir ao tocar na notificação —
+-- não é uma URL de verdade, só um ponteiro interno (ver
+-- utils/notificacoes.js no backend e 07-notificacoes.js no front).
+CREATE TABLE IF NOT EXISTS notificacoes (
+    id TEXT PRIMARY KEY,
+    usuario_id TEXT NOT NULL,
+    tipo TEXT NOT NULL,               -- 'avaliacao_pendente' | 'avaliacao_publicada' | 'avaliacao_rejeitada' | 'prestador_salvo'
+    titulo TEXT NOT NULL,
+    corpo TEXT,
+    link TEXT,
+    lida INTEGER NOT NULL DEFAULT 0,
+    criado_em INTEGER NOT NULL,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_avaliacoes_prestador ON avaliacoes(prestador_id, status);
 CREATE INDEX IF NOT EXISTS idx_salvos_usuario ON salvos(usuario_id);
+-- lida=0 primeiro seria ideal, mas a lista sempre ordena por criado_em DESC
+-- (mais recente no topo, lida ou não) — este índice já cobre os dois usos
+-- reais: contagem de não lidas (nao-lidas) e listagem geral (GET /).
+CREATE INDEX IF NOT EXISTS idx_notificacoes_usuario ON notificacoes(usuario_id, criado_em DESC);

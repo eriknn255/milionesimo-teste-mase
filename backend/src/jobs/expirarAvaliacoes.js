@@ -3,7 +3,7 @@ const db = require("../db");
 // Mesmas regras do front (PRAZO_AVALIACAO_DIAS): sem resposta do
 // prestador em 7 dias, a avaliação é publicada automaticamente — o
 // silêncio favorece o cliente, não bloqueia review legítima.
-const PRAZO_AVALIACAO_MS = 7 * 24 * 60 * 60 * 1000;
+const PRAZO_AVALIACAO_MS = 1 * 24 * 60 * 60 * 1000;
 
 // Antes isso só rodava "na leitura" (resolverExpiracoesAvaliacoes chamada
 // toda vez que a fila era aberta) porque não tinha como ter um relógio de

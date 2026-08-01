@@ -9,6 +9,7 @@ const { identificarUsuario } = require("./middleware/identidade");
 const rotasUsuarios = require("./routes/usuarios");
 const rotasPrestadores = require("./routes/prestadores");
 const rotasAvaliacoes = require("./routes/avaliacoes");
+const rotasNotificacoes = require("./routes/notificacoes");
 const { iniciarJobExpiracao } = require("./jobs/expirarAvaliacoes");
 
 const app = express();
@@ -27,6 +28,7 @@ app.use("/uploads", express.static(path.join(__dirname, "public/uploads")));
 app.use("/api/usuarios", rotasUsuarios);
 app.use("/api/prestadores", rotasPrestadores);
 app.use("/api", rotasAvaliacoes); // /api/prestadores/:id/avaliacoes*, /api/avaliacoes/:id/*
+app.use("/api/notificacoes", rotasNotificacoes);
 
 app.get("/api/saude", (req, res) => res.json({ ok: true }));
 

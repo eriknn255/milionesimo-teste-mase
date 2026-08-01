@@ -30,10 +30,10 @@ const TIPO_MAPA_INICIAL = "roadmap"; // pra trocar o tipo inicial do mapa, mude 
 
 // --- Cadastro de prestador ---
 const PALETA_CORES_CADASTRO = ["#2f6fed", "#e0a52f", "#1c7a5e", "#8a4fd1"];
-const MAP_ID_CADASTRO = "11668dd49e3ef62f968278aa";
+const MAP_ID_CADASTRO = "11668dd49e3ef62fd70c9df8";
 
 // --- API / backend ---
-const API_BASE = "https://mase-ec2.ruexinternet.com/api";
+const API_BASE = "http://192.168.3.245:3000/api";
 const UPLOADS_BASE = API_BASE.replace(/\/api$/, "");
 const LIMITE_PRESTADORES_POR_CONTA = 3;
 const GOOGLE_CLIENT_ID = "131029563564-25fb10maaduh4ki6nu8pspqohp8kg49c.apps.googleusercontent.com";
@@ -49,15 +49,22 @@ const CHAVE_TOKEN_SESSAO = "mase_token_sessao"; // JWT assinado pelo servidor, v
 // --- Busca ---
 const ATRASO_BUSCA_MS = 300;
 
+// --- Notificações (sino) ---
+// Intervalo do polling de "há notificação nova?" enquanto o app está
+// aberto e a conta está logada (ver 07-notificacoes.js). 30s é frequente
+// o bastante pra parecer "quase em tempo real" sem virar um efeito
+// DDoS-caseiro no próprio servidor — nada aqui precisa de WebSocket ainda.
+const ATRASO_POLLING_NOTIFICACOES_MS = 30 * 1000;
+
 // --- Placeholders de imagem ---
-const CAPA_PLACEHOLDER = "/img/placeholders/capa-placeholder.webp";
+const CAPA_PLACEHOLDER = "/frontend/img/placeholders/capa-placeholder.webp";
 const AVATAR_PLACEHOLDER = [
-    "/img/placeholders/avatar-placeholder-1.webp",
-    "/img/placeholders/avatar-placeholder-2.webp",
-    "/img/placeholders/avatar-placeholder-3.webp",
-    "/img/placeholders/avatar-placeholder-4.webp",
-    "/img/placeholders/avatar-placeholder-5.webp",
-    "/img/placeholders/avatar-placeholder-6.webp",
+    "/frontend/img/placeholders/avatar-placeholder-1.webp",
+    "/frontend/img/placeholders/avatar-placeholder-2.webp",
+    "/frontend/img/placeholders/avatar-placeholder-3.webp",
+    "/frontend/img/placeholders/avatar-placeholder-4.webp",
+    "/frontend/img/placeholders/avatar-placeholder-5.webp",
+    "/frontend/img/placeholders/avatar-placeholder-6.webp",
 ];
 
 
@@ -65,5 +72,5 @@ const AVATAR_PLACEHOLDER = [
 const INTERVALO_ROTACAO_CAPA_MS = 2500;
 
 // --- Avaliações ---
-const PRAZO_AVALIACAO_DIAS = 7;
+const PRAZO_AVALIACAO_DIAS = 1;
 const PRAZO_AVALIACAO_MS = PRAZO_AVALIACAO_DIAS * 24 * 60 * 60 * 1000;

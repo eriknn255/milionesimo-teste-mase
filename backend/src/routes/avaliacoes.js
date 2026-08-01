@@ -7,6 +7,7 @@ const { v4: uuidv4 } = require("uuid");
 const db = require("../db");
 const { sanitizarTexto } = require("../utils/sanitizar");
 const { exigirUsuario } = require("../middleware/identidade");
+const { criarNotificacao } = require("../utils/criarNotificacao");
 
 const router = express.Router();
 
@@ -39,30 +40,52 @@ const upload = multer({
     }
 });
 
-// Envolve upload.single("foto") pra transformar os erros do multer (arquivo
-// grande demais, tipo inválido) em JSON 400 igual ao resto da API, em vez
-// de deixar cair no handler de erro genérico do Express (que devolveria
-// HTML/500). A rota em si só roda se isso chamar next() sem erro.
-function receberFotoOpcional(req, res, next) {
-    upload.single("foto")(req, res, (erro) => {
+// Envolve upload.array("fotos", 3) pra transformar os erros do multer
+// (arquivo grande demais, tipo inválido, mais de 3 arquivos) em JSON 400
+// igual ao resto da API, em vez de deixar cair no handler de erro
+// genérico do Express (que devolveria HTML/500). A rota em si só roda se
+// isso chamar next() sem erro.
+function receberFotosOpcionais(req, res, next) {
+    upload.array("fotos", 3)(req, res, (erro) => {
         if (!erro) return next();
 
         if (erro instanceof multer.MulterError && erro.code === "LIMIT_FILE_SIZE") {
             return res.status(400).json({ erro: `Foto muito grande (máximo ${TAMANHO_MAXIMO_BYTES / 1024 / 1024}MB).` });
         }
+        if (erro instanceof multer.MulterError && erro.code === "LIMIT_UNEXPECTED_FILE") {
+            return res.status(400).json({ erro: "No máximo 3 fotos por avaliação." });
+        }
         if (erro.message === "TIPO_INVALIDO") {
             return res.status(400).json({ erro: "O arquivo enviado precisa ser uma imagem." });
         }
-        return res.status(400).json({ erro: "Não foi possível receber a foto enviada." });
+        return res.status(400).json({ erro: "Não foi possível receber as fotos enviadas." });
     });
 }
 
-// Recebe o buffer em memória, normaliza orientação (fotos de celular vêm
-// com EXIF de rotação), redimensiona mantendo proporção e grava como
-// .webp com nome próprio (uuid, não amarrado a prestador+índice como os
-// exemplos antigos eram — cada avaliação tem no máximo uma foto sua).
-// Retorna o caminho público (servido estático, ver server.js) ou null se
-// não veio arquivo nenhum (foto é opcional).
+// Formato fixo 9:19.5 (retrato "tela cheia", a mesma proporção de tela
+// de celular moderno) pra foto MESTRE gravada em disco — é essa versão
+// cheia que abre no PhotoLightbox em tela cheia (ver abrirLightbox em
+// script.js). O card da grade (.ProviderProfileGalleryItem em style.css)
+// usa um aspect-ratio diferente, 9:16 — mais "quadrado" pra caber 3 por
+// linha — então corta um pedaço a mais dessa foto mestre só visualmente
+// via CSS (object-fit: cover no <img> dentro do card); o arquivo salvo
+// aqui continua sendo sempre o 9:19.5 inteiro, a foto não é recortada
+// duas vezes em disco. Resolução trava em 1080p (maior lado, aqui a
+// largura, no máximo 1080px) — mesma meta de "1080p" usada na
+// compressão do lado do navegador antes do upload (ver
+// comprimirImagemParaUpload em script.js), só que aqui é a garantia
+// final, do lado do servidor, que não depende do navegador de quem
+// mandou a foto ter aplicado a compressão certo.
+// fit:"cover" corta o que sobra (em vez de só limitar o tamanho como
+// antes, que mantinha a proporção original de cada foto — cada uma vinha
+// com um formato diferente, dependendo do celular/orientação de quem
+// tirou). position:"attention" pede ao sharp pra tentar centralizar o
+// corte na parte mais "interessante" da imagem (maior saliência/
+// contraste) em vez de cortar sempre no centro geométrico — importante
+// aqui porque 9:19.5 é um recorte bem vertical, sobra pouca margem de erro.
+const LARGURA_FOTO_AVALIACAO = 1080; // 1080p: maior lado da foto trava em 1080px
+const ALTURA_FOTO_AVALIACAO = Math.round(LARGURA_FOTO_AVALIACAO * 19.5 / 9); // 2340
+
 async function salvarFotoAvaliacao(file) {
     if (!file) return null;
 
@@ -71,11 +94,23 @@ async function salvarFotoAvaliacao(file) {
 
     await sharp(file.buffer)
         .rotate() // aplica a orientação do EXIF e descarta o campo, evita foto "deitada"
-        .resize(1600, 1600, { fit: "inside", withoutEnlargement: true })
+        .resize(LARGURA_FOTO_AVALIACAO, ALTURA_FOTO_AVALIACAO, { fit: "cover", position: "attention" })
         .webp({ quality: 82 })
         .toFile(caminhoAbsoluto);
 
     return `/uploads/avaliacoes/${nomeArquivo}`;
+}
+
+// Processa até 3 arquivos em paralelo (Promise.all — são independentes
+// entre si, não tem motivo pra serializar) e sempre devolve um array de
+// EXATAMENTE 3 posições ([url1, url2, url3], cada uma null se aquele slot
+// não veio preenchido) — os 3 valores mapeiam direto pras colunas
+// foto_url/foto_url2/foto_url3 na hora do INSERT, sem precisar de lógica
+// condicional a mais lá.
+async function salvarFotosAvaliacao(files = []) {
+    const urls = await Promise.all(files.slice(0, 3).map(salvarFotoAvaliacao));
+    while (urls.length < 3) urls.push(null);
+    return urls;
 }
 
 // Mesma janela do front (JANELA_TAG_WHATSAPP_MS) — clique muito antigo não
@@ -107,8 +142,8 @@ router.post("/prestadores/:id/whatsapp-clique", (req, res) => {
 // 400 antes de gastar uma checagem de auth — mas exigirUsuario continua
 // rodando normalmente pros outros casos (não afeta quem já estava
 // mandando avaliação sem foto, já que ela é opcional).
-router.post("/prestadores/:id/avaliacoes", receberFotoOpcional, exigirUsuario, async (req, res) => {
-    const prestador = db.prepare("SELECT id FROM prestadores WHERE id = ?").get(req.params.id);
+router.post("/prestadores/:id/avaliacoes", receberFotosOpcionais, exigirUsuario, async (req, res) => {
+    const prestador = db.prepare("SELECT id, dono_usuario_id, categoria FROM prestadores WHERE id = ?").get(req.params.id);
     if (!prestador) return res.status(404).json({ erro: "Prestador não encontrado." });
 
     const autorNome = sanitizarTexto(req.body.autorNome, 80) || req.usuario.nome;
@@ -119,12 +154,12 @@ router.post("/prestadores/:id/avaliacoes", receberFotoOpcional, exigirUsuario, a
         return res.status(400).json({ erro: "comentario é obrigatório e nota precisa ser um inteiro de 1 a 5." });
     }
 
-    let fotoUrl;
+    let fotoUrl, fotoUrl2, fotoUrl3;
     try {
-        fotoUrl = await salvarFotoAvaliacao(req.file);
+        [fotoUrl, fotoUrl2, fotoUrl3] = await salvarFotosAvaliacao(req.files);
     } catch (erro) {
-        console.error("Falha ao processar foto da avaliação:", erro);
-        return res.status(400).json({ erro: "Não foi possível processar a foto enviada. Tente outra imagem." });
+        console.error("Falha ao processar fotos da avaliação:", erro);
+        return res.status(400).json({ erro: "Não foi possível processar as fotos enviadas. Tente outras imagens." });
     }
 
     const clique = db.prepare("SELECT criado_em FROM cliques_whatsapp WHERE prestador_id = ? AND usuario_id = ?")
@@ -139,17 +174,38 @@ router.post("/prestadores/:id/avaliacoes", receberFotoOpcional, exigirUsuario, a
         nota,
         comentario,
         foto_url: fotoUrl,
+        foto_url2: fotoUrl2,
+        foto_url3: fotoUrl3,
         status: "pendente",
         via_whatsapp: viaWhatsapp ? 1 : 0,
         criado_em: Date.now()
     };
 
     db.prepare(`
-        INSERT INTO avaliacoes (id, prestador_id, autor_nome, autor_usuario_id, nota, comentario, foto_url, status, via_whatsapp, criado_em)
-        VALUES (@id, @prestador_id, @autor_nome, @autor_usuario_id, @nota, @comentario, @foto_url, @status, @via_whatsapp, @criado_em)
+        INSERT INTO avaliacoes (id, prestador_id, autor_nome, autor_usuario_id, nota, comentario, foto_url, foto_url2, foto_url3, status, via_whatsapp, criado_em)
+        VALUES (@id, @prestador_id, @autor_nome, @autor_usuario_id, @nota, @comentario, @foto_url, @foto_url2, @foto_url3, @status, @via_whatsapp, @criado_em)
     `).run(avaliacao);
 
-    res.status(201).json({ id: avaliacao.id, status: "pendente", fotoUrl });
+    // Só notifica se o prestador tem um dono real por trás (os 6 demos têm
+    // dono_usuario_id NULL — ver formatarPrestador.js/schema.sql — e
+    // criarNotificacao já ignora usuarioId vazio, mas o if aqui evita nem
+    // tentar).
+    // link aponta pra ESSA avaliação (não mais pro prestador): desde que os
+    // cards de Aceitar/Rejeitar passaram a viver dentro do próprio painel
+    // de notificações (ver 07-notificacoes.js), o front usa esse id pra
+    // marcar a notificação como lida sozinha assim que a avaliação é
+    // decidida por lá — sem precisar de outro clique.
+    if (prestador.dono_usuario_id) {
+        criarNotificacao({
+            usuarioId: prestador.dono_usuario_id,
+            tipo: "avaliacao_pendente",
+            titulo: "Nova avaliação para revisar",
+            corpo: `${autorNome} avaliou seu prestador de ${prestador.categoria}. Toque para decidir se ela aparece pro público.`,
+            link: `avaliacao-pendente:${avaliacao.id}`
+        });
+    }
+
+    res.status(201).json({ id: avaliacao.id, status: "pendente", fotoUrls: [fotoUrl, fotoUrl2, fotoUrl3].filter(Boolean) });
 });
 
 // GET /api/prestadores/:id/avaliacoes/pendentes — fila cega, só o dono vê.
@@ -189,8 +245,18 @@ router.get("/prestadores/:id/avaliacoes/pendentes", exigirUsuario, (req, res) =>
 
 // POST /api/avaliacoes/:id/aceitar — dono publica.
 router.post("/avaliacoes/:id/aceitar", exigirUsuario, (req, res) => {
-    const decisao = decidirComoDeOwner(req, res, "publicada");
-    if (decisao) res.status(204).end();
+    const avaliacao = decidirComoDeOwner(req, res, "publicada");
+    if (!avaliacao) return;
+
+    criarNotificacao({
+        usuarioId: avaliacao.autor_usuario_id,
+        tipo: "avaliacao_publicada",
+        titulo: "Sua avaliação foi publicada",
+        corpo: "O prestador aceitou sua avaliação — ela já aparece no perfil dele.",
+        link: `prestador:${avaliacao.prestador_id}`
+    });
+
+    res.status(204).end();
 });
 
 // POST /api/avaliacoes/:id/rejeitar — dono rejeita, motivo obrigatório
@@ -199,16 +265,27 @@ router.post("/avaliacoes/:id/rejeitar", exigirUsuario, (req, res) => {
     const motivo = sanitizarTexto(req.body.motivo, 120);
     if (!motivo) return res.status(400).json({ erro: "motivo é obrigatório pra rejeitar." });
 
-    const decisao = decidirComoDeOwner(req, res, "rejeitada", motivo);
-    if (decisao) res.status(204).end();
+    const avaliacao = decidirComoDeOwner(req, res, "rejeitada", motivo);
+    if (!avaliacao) return;
+
+    criarNotificacao({
+        usuarioId: avaliacao.autor_usuario_id,
+        tipo: "avaliacao_rejeitada",
+        titulo: "Sua avaliação não foi publicada",
+        corpo: `Motivo informado pelo prestador: ${motivo}`,
+        link: `prestador:${avaliacao.prestador_id}`
+    });
+
+    res.status(204).end();
 });
 
 // Confere posse e aplica a mudança de status — usado por aceitar/rejeitar
-// acima. Retorna true se aplicou (e quem chamou deve responder 204),
-// false se já respondeu com erro (404/403/409).
+// acima. Retorna a linha da avaliação (autor_usuario_id + prestador_id,
+// pra quem chamou poder notificar o autor) se aplicou, ou null se já
+// respondeu com erro (404/403/409).
 function decidirComoDeOwner(req, res, novoStatus, motivo = null) {
     const avaliacao = db.prepare(`
-        SELECT a.status, p.dono_usuario_id
+        SELECT a.status, a.autor_usuario_id, a.prestador_id, p.dono_usuario_id
         FROM avaliacoes a
         JOIN prestadores p ON p.id = a.prestador_id
         WHERE a.id = ?
@@ -216,20 +293,20 @@ function decidirComoDeOwner(req, res, novoStatus, motivo = null) {
 
     if (!avaliacao) {
         res.status(404).json({ erro: "Avaliação não encontrada." });
-        return false;
+        return null;
     }
     if (avaliacao.dono_usuario_id !== req.usuario.id) {
         res.status(403).json({ erro: "Só o dono do prestador decide essa avaliação." });
-        return false;
+        return null;
     }
     if (avaliacao.status !== "pendente") {
         res.status(409).json({ erro: `Essa avaliação já foi decidida (status: ${avaliacao.status}).` });
-        return false;
+        return null;
     }
 
     db.prepare("UPDATE avaliacoes SET status = ?, motivo_rejeicao = ? WHERE id = ?")
         .run(novoStatus, motivo, req.params.id);
-    return true;
+    return avaliacao;
 }
 
 // Caminho salvo no banco é sempre relativo ("/uploads/avaliacoes/x.webp").
@@ -255,7 +332,7 @@ router.get("/prestadores/:id/avaliacoes/ultima", (req, res) => {
     const ultima = db.prepare(`
         SELECT a.autor_nome AS nome, a.autor_usuario_id AS usuarioId,
                u.avatar_url AS avatarUrl, u.avatar_customizado AS avatarCustomizado,
-               a.comentario, a.nota, a.foto_url AS fotoUrl
+               a.comentario, a.nota, a.foto_url AS fotoUrl, a.foto_url2 AS fotoUrl2, a.foto_url3 AS fotoUrl3
         FROM avaliacoes a
         LEFT JOIN usuarios u ON u.id = a.autor_usuario_id
         WHERE a.prestador_id = ? AND a.status = 'publicada'
@@ -264,25 +341,60 @@ router.get("/prestadores/:id/avaliacoes/ultima", (req, res) => {
     `).get(req.params.id);
 
     if (!ultima) return res.json(null);
-    res.json({ ...ultima, avatarCustomizado: ultima.avatarCustomizado || 0, fotoUrl: urlAbsolutaFoto(req, ultima.fotoUrl) });
+
+    // fotoUrls: as até-3 fotos dessa avaliação, já em URL absoluta e sem
+    // os slots vazios. fotoUrl (singular) continua no payload — é a
+    // primeira do array — só por compatibilidade com quem já lia esse
+    // campo antes de existirem os outros dois slots.
+    const fotoUrls = [ultima.fotoUrl, ultima.fotoUrl2, ultima.fotoUrl3]
+        .filter(Boolean)
+        .map(url => urlAbsolutaFoto(req, url));
+
+    res.json({
+        nome: ultima.nome,
+        usuarioId: ultima.usuarioId,
+        avatarUrl: ultima.avatarUrl,
+        avatarCustomizado: ultima.avatarCustomizado || 0,
+        comentario: ultima.comentario,
+        nota: ultima.nota,
+        fotoUrl: fotoUrls[0] || null,
+        fotoUrls
+    });
 });
 
 // GET /api/prestadores/:id/fotos-clientes — galeria de fotos reais
 // (substitui fotosClientesExemplo do front). Só avaliação PUBLICADA
 // entra aqui — mesma regra da fila cega, a foto não vaza antes do dono
-// decidir. Nem toda avaliação tem foto (é opcional), por isso o filtro
-// foto_url IS NOT NULL. Limita a 12 pra não virar uma grade infinita no
-// perfil; mais que isso, a galeria já cumpriu o papel de dar confiança.
+// decidir. Nem toda avaliação tem foto (é opcional).
+//
+// Devolve UM item por AVALIAÇÃO (não uma linha achatada por foto) — cada
+// item já traz o array `fotos` com as até-3 URLs daquela avaliação, na
+// ordem dos slots. É o front (fotosClientesPrestador) que decide como
+// exibir isso: capa = fotos[0], contador = fotos.length quando >1, e o
+// PhotoLightbox arrasta só dentro desse array quando a pessoa abre aquela
+// avaliação — nunca mistura fotos de avaliações diferentes no mesmo
+// carrossel. Limita a 12 avaliações (não 12 fotos) pra não virar uma
+// grade infinita no perfil; mais que isso, a galeria já cumpriu o papel
+// de dar confiança.
 router.get("/prestadores/:id/fotos-clientes", (req, res) => {
-    const fotos = db.prepare(`
-        SELECT foto_url AS src, autor_nome AS autor
+    const linhas = db.prepare(`
+        SELECT foto_url, foto_url2, foto_url3, autor_nome AS autor, comentario, nota, criado_em AS criadoEm
         FROM avaliacoes
-        WHERE prestador_id = ? AND status = 'publicada' AND foto_url IS NOT NULL
+        WHERE prestador_id = ? AND status = 'publicada' AND (foto_url IS NOT NULL OR foto_url2 IS NOT NULL OR foto_url3 IS NOT NULL)
         ORDER BY criado_em DESC
         LIMIT 12
     `).all(req.params.id);
 
-    res.json(fotos.map(f => ({ ...f, src: urlAbsolutaFoto(req, f.src) })));
+    const grupos = linhas.map(l => ({
+        autor: l.autor,
+        comentario: l.comentario,
+        nota: l.nota,
+        fotos: [l.foto_url, l.foto_url2, l.foto_url3]
+            .filter(Boolean)
+            .map(url => urlAbsolutaFoto(req, url))
+    }));
+
+    res.json(grupos);
 });
 
 module.exports = router;

@@ -176,6 +176,20 @@
                 <div class="ProfileLoggedInBadge" id="profileEmailExibido">Conta Google</div>
             </div>
             <div class="ProfileMenuList">
+                <button type="button" class="ProfileMenuItem" id="btnAbrirNotificacoes">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path fill-rule="evenodd" clip-rule="evenodd"
+                            d="M5.25 9a6.75 6.75 0 0 1 13.5 0v.75c0 2.123.8 4.057 2.118 5.52a.75.75 0 0 1-.297 1.206 24.585 24.585 0 0 1-4.831 1.243 3.75 3.75 0 1 1-7.48 0 24.585 24.585 0 0 1-4.831-1.244.75.75 0 0 1-.298-1.205A8.217 8.217 0 0 0 5.25 9.75V9Zm4.502 8.9a2.25 2.25 0 1 0 4.496 0 25.057 25.057 0 0 1-4.496 0Z"
+                            fill="currentColor"></path>
+                    </svg>
+                    Notificações
+                    <span class="ProfileMenuItemBadge" id="profileMenuNotifBadge" hidden>0</span>
+                    <svg class="ProfileMenuItemChevron" viewBox="0 0 24 24" fill="none"
+                        xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                            stroke-linejoin="round"></path>
+                    </svg>
+                </button>
                 <button type="button" class="ProfileMenuItem" id="btnEditarPerfil">
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M4 20h4L18.5 9.5a2 2 0 0 0 0-2.83l-1.17-1.17a2 2 0 0 0-2.83 0L4 16v4Z"
@@ -290,6 +304,51 @@
         </div>
     </div>
 
+    <!-- ==========================================================================
+         NOTIFICAÇÕES — destino de tela cheia, mesmo chrome de
+         .ProviderProfile + .CadastroOverlayHeader que "Preferências da
+         conta" e "Gerenciar meus serviços" (os outros dois itens do menu
+         do Perfil) já usam — os três agora se comportam igual, em vez de
+         Notificações ser a única a abrir como folha flutuante sobre fundo
+         escurecido. Participa da pilha de overlays/botão voltar do app
+         (registrarAberturaOverlay/registrarFechamentoOverlay em
+         00-script.js), chamados de dentro de abrirPainelNotificacoes()/
+         fecharPainelNotificacoes() em 07-notificacoes.js. Ponto de
+         entrada continua sendo só o item "Notificações" dentro do Perfil
+         + o pontinho no ícone Perfil do Dock (#dockNotifDot) — não existe
+         sino fixo em lugar nenhum. -->
+    <div class="ProviderProfile NotifOverlay" id="notifPanel" hidden>
+        <div class="CadastroOverlayHeader">
+            <div class="CadastroOverlayTitle">Notificações</div>
+            <div class="NotifOverlayHeaderActions">
+                <button type="button" class="NotifPanelMarkAll" id="notifMarkAllBtn">Marcar tudo como lido</button>
+                <button type="button" class="CadastroOverlayClose" id="notifPanelCloseBtn" aria-label="Fechar">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <div class="ProviderProfileBody">
+            <div class="CadastroWrap">
+                <!-- Mesma marcação/classes de #avaliacoesPendentesSection em
+                     04-cad-prestador.tpl — os cards de Aceitar/Rejeitar são
+                     os MESMOS (renderizarAvaliacoesPendentes em 00-script.js
+                     agora aceita um container qualquer), só que aqui dentro
+                     do painel de notificações em vez de só em "Gerenciar meus
+                     serviços". Ver 07-notificacoes.js. -->
+                <div class="AvaliacoesPendentesSection" id="notifPendentesSection" hidden>
+                    <div class="CadastroMeusTitle">Avaliações pendentes</div>
+                    <div class="AvaliacoesPendentesHint">Você não vê a nota nem o comentário até decidir — só quem
+                        avaliou, quando, e se contatou pelo WhatsApp.</div>
+                    <div class="AvaliacoesPendentesList" id="notifPendentesList"></div>
+                </div>
+
+                <div class="NotifList" id="notifList"></div>
+            </div>
+        </div>
+    </div>
+
     <footer>
         <div class="bottom-flexbox">
             <div class="Dock ThemedControl">
@@ -335,6 +394,7 @@
                                 d="M5 18.5714C5 16.0467 7.0467 14 9.57143 14H14.4286C16.9533 14 19 16.0467 19 18.5714C19 20.465 17.465 22 15.5714 22H8.42857C6.53502 22 5 20.465 5 18.5714Z">
                             </path>
                         </svg>
+                        <span class="DockNotifDot" id="dockNotifDot" hidden></span>
                     </span>
                 </button>
 
@@ -367,6 +427,8 @@
 <script src="01-constantes.js"></script>
 <script src="02-maps-loader.js"></script>
 <script src="00-script.js"></script>
+<script src="07-notificacoes.js"></script>
+<script src="08-lembrete-expiracao.js"></script>
 <script src="03-init-app.js"></script>
 
 </html>

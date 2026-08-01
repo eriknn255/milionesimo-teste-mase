@@ -18,7 +18,7 @@
     --muted: #6b6f7a;
     --border: #e8e6e1;
     --soft-blue: #0a72e2;
-    --blue-shadow: #60c0ff20;
+    --blue-shadow: #525f6d15; /*em teste para padronização*/ 
     --back-red: #ff000045;
 
     /* vermelho de erro/perigo (formulários, botões destrutivos) — distinto
@@ -32,7 +32,7 @@
     /* tons derivados de superfície — usados em estados de pressão/fundo
        sobre --paper e em placeholders neutros, antes soltos em hex
        repetido por vários seletores */
-    --paper-tint: #f2efe8;
+    /*--blue-shadow: #f2efe8;*/
     --placeholder-bg: #e4e4e7;
     --skeleton-highlight: #f4f2ee;
 
@@ -248,7 +248,7 @@ footer {
     height: 26px;
     border: none;
     border-radius: 50%;
-    background-color: var(--paper-tint);
+    background-color: var(--blue-shadow);
     color: var(--muted);
     display: flex;
     align-items: center;
@@ -299,7 +299,7 @@ footer {
     /* padding reduzido em 1px pra compensar a borda nova abaixo — o
        tamanho final do chip fica igual ao anterior (sem borda) */
     padding: 8px 15px;
-    border: 1px solid var(--border);
+    border: 1px;
     border-radius: 999px;
     background-color: var(--paper);
     color: var(--ink-text);
@@ -449,7 +449,7 @@ footer {
     padding: 8px 15px;
     border: none;
     border-radius: 999px;
-    background-color: var(--paper-tint);
+    background-color: var(--blue-shadow);
     color: var(--ink-text);
     font-family: inherit;
     font-weight: 700;
@@ -477,7 +477,7 @@ footer {
 
 .ResultsList .ResultsHeader + .ResultItem { border-top: none; }
 
-.ResultItem:active { background-color: var(--paper-tint); }
+.ResultItem:active { background-color: var(--blue-shadow); }
 
 /* Avatar + nome/categoria — era o layout do .ResultItem antigo, agora
    isolado aqui porque .ResultItem virou uma coluna (esta linha em cima,
@@ -582,10 +582,18 @@ footer {
    novos, cada um com seu próprio clique — ambos param a propagação pra
    não abrir o perfil por baixo, ver renderizarPaginaSalvos em script.js).
    Só ícone, sem rótulo, a pedido — aria-label cobre a acessibilidade.
+
+   flex-direction: row (não a coluna herdada de .ResultItem): os ícones
+   ficam na ponta direita da MESMA linha do avatar/texto, centralizados
+   verticalmente — não empilhados numa segunda linha embaixo. Empilhado
+   deixava os ícones flutuando bem mais à esquerda que o avatar acima
+   deles (sem padding-left combinando com o padding do .SavedItemMain) e
+   ainda inflava a altura do item à toa.
    ========================================================================== */
 .ResultItem.SavedItem {
+    flex-direction: row;
+    align-items: center;
     padding: 0;
-    align-items: stretch;
 }
 
 .SavedItemMain {
@@ -594,7 +602,7 @@ footer {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 11px 18px;
+    padding: 11px 10px 11px 18px;
     border: none;
     background: transparent;
     text-align: left;
@@ -602,7 +610,7 @@ footer {
     cursor: pointer;
 }
 
-.SavedItemMain:active { background-color: var(--paper-tint); }
+.SavedItemMain:active { background-color: var(--blue-shadow); }
 
 .SavedItemActions {
     display: flex;
@@ -617,7 +625,7 @@ footer {
     height: 36px;
     border-radius: 50%;
     border: none;
-    background-color: var(--paper-tint);
+    background-color: var(--blue-shadow);
     color: var(--muted);
     display: flex;
     align-items: center;
@@ -732,12 +740,20 @@ footer {
     padding-bottom: 7.9vh;
 }
 
+/* padding-top de 76px: espaço reservado pro sino de notificações, que é
+   fixed e fica visível em cima de TODAS as abas (Home/Salvos/Perfil/Menu),
+   não só na Home — sem essa folga, "Contatos Salvos" começava embaixo do
+   círculo do sino. 76px cobre tanto o desktop (bell top:16px) quanto o
+   mobile (bell top:10px), já que o próprio círculo tem 46px de altura nos
+   dois. Fica reservado mesmo pra quem está deslogado (sino escondido) —
+   só um respiro a mais no topo, não vale a pena duplicar a regra condicional
+   ao estado de login só por isso. */
 .SavedPageTitle {
     font-family: var(--font-display);
     font-size: 22px;
     font-weight: 600;
     color: var(--ink-text);
-    padding: 20px 20px 12px;
+    padding: 76px 20px 12px;
 }
 
 .SavedList .ResultItem { border-top: 1px solid var(--border); }
@@ -769,6 +785,7 @@ footer {
     position: relative;
     width: 100%;
     aspect-ratio: 16 / 9;
+    
 }
 
 .ProviderProfileCoverImg {
@@ -889,7 +906,7 @@ footer {
 }
 
 .StatusBadge--fechado {
-    background-color: var(--paper-tint);
+    background-color: var(--blue-shadow);
     color: var(--muted);
 }
 
@@ -960,7 +977,7 @@ footer {
 }
 
 .ProviderProfileReview {
-    background-color: var(--paper-tint);
+    background-color: var(--blue-shadow);
     border-radius: 16px;
     padding: 14px 16px;
 }
@@ -1005,7 +1022,7 @@ footer {
 }
 
 .ProviderProfileReviewEmpty {
-    background-color: var(--paper-tint);
+    background-color: var(--blue-shadow);
     border-radius: 16px;
     padding: 14px 16px;
     font-size: 13.5px;
@@ -1014,26 +1031,45 @@ footer {
 
 /* ==========================================================================
    GALERIA "FOTOS DOS CLIENTES"
-   Grade de 3 colunas, cada foto abre em tela cheia (.PhotoLightbox) ao
-   tocar — ver abrirLightbox() em script.js. Fotos reais enviadas pelo
-   cliente junto da avaliação (GET /prestadores/:id/fotos-clientes),
+   Uma linha só, com scroll horizontal — cada item é uma AVALIAÇÃO (não
+   uma foto solta): mostra a capa (primeira foto) e, se a avaliação tiver
+   mais de uma, um contador "+N" por cima (.ProviderProfileGalleryCount).
+   Tocar abre .PhotoLightbox só com as fotos DAQUELA avaliação — arrastar
+   lá dentro navega só entre elas, nunca mistura com fotos de outra
+   avaliação (ver abrirLightbox() em script.js). Fotos reais enviadas
+   pelo cliente junto da avaliação (GET /prestadores/:id/fotos-clientes),
    só de avaliações publicadas. Sem nenhuma ainda, mostra
-   .ProviderProfileGalleryEmpty em vez da grade.
+   .ProviderProfileGalleryEmpty em vez da lista.
+   Item em 9:16 — só um recorte visual (object-fit: cover) por cima da
+   capa MESTRE, que é sempre gravada em 9:19.5 no backend (ver
+   LARGURA/ALTURA_FOTO_AVALIACAO em routes/avaliacoes.js). Ao tocar, é
+   essa foto mestre 9:19.5 que abre em .PhotoLightbox preenchendo a tela
+   inteira.
    ========================================================================== */
 .ProviderProfileGallery {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    display: flex;
     gap: 8px;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    /* Some a barra de scroll visualmente sem perder o gesto de arrastar —
+       é uma tira de fotos, não uma lista que precisa parecer "scrollável"
+       o tempo todo. */
+    scrollbar-width: none;
 }
+
+.ProviderProfileGallery::-webkit-scrollbar { display: none; }
 
 .ProviderProfileGalleryItem {
     position: relative;
-    aspect-ratio: 1;
+    flex: 0 0 auto;
+    width: 104px;
+    aspect-ratio: 9 / 16;
     border: none;
     border-radius: 12px;
     overflow: hidden;
     padding: 0;
     background-color: var(--placeholder-bg);
+    scroll-snap-align: start;
 }
 
 .ProviderProfileGalleryItem img {
@@ -1041,6 +1077,18 @@ footer {
     height: 100%;
     object-fit: cover;
     display: block;
+}
+
+.ProviderProfileGalleryCount {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background-color: rgba(20, 22, 31, 0.65);
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
 }
 
 .ProviderProfileGalleryCaption {
@@ -1065,36 +1113,46 @@ footer {
 .ProviderProfileGalleryEmpty {
     font-size: 13px;
     color: var(--muted);
-    background-color: var(--paper-tint);
+    background-color: var(--blue-shadow);
     border-radius: 12px;
     padding: 14px;
     text-align: center;
 }
 
-/* Campo de foto no formulário de avaliação (abrirAvaliarPrestador) — o
+/* Campo de foto no formulário de avaliação (abrirAvaliarPrestador) — 3
+   slots lado a lado, cada um independente (criarSlotFoto no front). O
    <input type="file"> real fica hidden; o botão visível é o <label>
    apontando pra ele (clicar no label abre o seletor nativo). Depois de
-   escolher uma foto, o botão some e dá lugar à prévia. */
+   escolher uma foto naquele slot, o botão dele some e dá lugar à prévia
+   — só daquele slot, os outros dois continuam do jeito que estavam. */
+.AvaliarFotosGrade {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.AvaliarFotoSlot {
+    position: relative;
+    aspect-ratio: 9 / 16;
+}
+
 .AvaliarFotoBtn {
+    position: absolute;
+    inset: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    height: 46px;
     border: 1px dashed var(--border);
     border-radius: 14px;
     color: var(--muted);
-    font-family: var(--font-body);
-    font-size: 14px;
-    font-weight: 600;
     cursor: pointer;
     transition: border-color 0.15s ease, color 0.15s ease;
 }
 
 .AvaliarFotoBtn svg {
     flex-shrink: 0;
-    width: 18px;
-    height: 18px;
+    width: 22px;
+    height: 22px;
 }
 
 .AvaliarFotoBtn:hover {
@@ -1105,14 +1163,14 @@ footer {
 .AvaliarFotoBtn[hidden] { display: none; }
 
 .AvaliarFotoPreview {
-    position: relative;
-    width: 100%;
-    max-width: 160px;
-    aspect-ratio: 1;
+    position: absolute;
+    inset: 0;
     border-radius: 14px;
     overflow: hidden;
-    background-color: var(--paper-tint);
+    background-color: var(--blue-shadow);
 }
+
+.AvaliarFotoPreview[hidden] { display: none; }
 
 .AvaliarFotoPreview img {
     width: 100%;
@@ -1121,12 +1179,24 @@ footer {
     display: block;
 }
 
+.AvaliarFotoPreviewFallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 6px;
+    text-align: center;
+    font-size: 11px;
+    line-height: 1.3;
+    color: var(--muted);
+}
+
 .AvaliarFotoRemover {
     position: absolute;
     top: 6px;
     right: 6px;
-    width: 26px;
-    height: 26px;
+    width: 24px;
+    height: 24px;
     border: none;
     border-radius: 50%;
     background-color: rgba(20, 22, 31, 0.65);
@@ -1136,53 +1206,147 @@ footer {
     justify-content: center;
 }
 
-.AvaliarFotoRemover svg { width: 14px; height: 14px; }
+.AvaliarFotoRemover svg { width: 13px; height: 13px; }
 
 /* Lightbox de tela cheia — z-index acima do .ProviderProfile (30), já
-   que abre por cima dele. */
+   que abre por cima dele. Preenche o viewport inteiro (sem padding, sem
+   moldura) e mostra a foto (já gravada em 9:19.5 no backend, ver
+   LARGURA/ALTURA_FOTO_AVALIACAO em routes/avaliacoes.js) cobrindo tudo
+   via object-fit: cover — mesmo estilo "story" do AliExpress ao tocar
+   numa foto de avaliação, comentário incluso sobreposto embaixo.
+   touch-action: none entrega o gesto inteiro pro JS (configurarArrasteLightbox
+   em script.js) em vez de deixar o navegador tentar rolar/dar zoom por
+   conta própria no meio do arrasto. */
 .PhotoLightbox {
     position: fixed;
     inset: 0;
     z-index: 40;
-    background-color: rgba(20, 22, 31, 0.92);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
+    background-color: #000000;
+    overflow: hidden;
+    touch-action: none;
     animation: perfil-entrar 0.15s ease;
 }
 
-.PhotoLightboxImg {
-    max-width: 100%;
-    max-height: 70vh;
-    border-radius: 12px;
-    object-fit: contain;
+/* Trilho do carrossel: um slide de 100% de largura por foto, lado a
+   lado, deslocado via transform: translateX(-indice * 100%) — ver
+   posicionarLightboxTrack em script.js. O arrasto (configurarArrasteLightbox)
+   só mexe nesse transform em tempo real, nunca troca o src da <img>: as
+   fotos vizinhas já estão no DOM prontas, então trocar de slide nunca
+   pisca/recarrega. */
+.PhotoLightboxTrack {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    width: 100%;
+    height: 100%;
 }
 
+.PhotoLightboxSlide {
+    position: relative;
+    flex: 0 0 100%;
+    width: 100%;
+    height: 100%;
+}
+
+.PhotoLightboxImg {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    -webkit-user-drag: none;
+    user-select: none;
+}
+
+/* Bolinhas no topo indicando quantas fotos tem e qual está ativa — só
+   aparece com mais de uma foto (ver `fotos.length > 1` em abrirLightbox).
+   pointer-events: none porque é só indicador, o arrasto acontece no
+   overlay inteiro por baixo dela. */
+.PhotoLightboxDots {
+    position: fixed;
+    top: calc(16px + env(safe-area-inset-top, 0px));
+    left: 0;
+    right: 0;
+    z-index: 2;
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    pointer-events: none;
+}
+
+.PhotoLightboxDot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: rgba(255, 255, 255, 0.35);
+    transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.PhotoLightboxDot.is-active {
+    background-color: #ffffff;
+    transform: scale(1.25);
+}
+
+/* Legenda sobreposta na parte inferior de CADA slide, com gradiente
+   escurecendo de baixo pra cima — garante contraste pro texto em cima de
+   qualquer foto, sem precisar de uma faixa sólida cobrindo parte da
+   imagem. padding-bottom usa env(safe-area-inset-bottom) por cima do
+   valor fixo pra não ficar embaixo da barra de gestos em iPhone/Android
+   mais novo. */
 .PhotoLightboxCaption {
-    margin-top: 14px;
-    color: var(--icon-on-dark);
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1;
+    padding: 64px 20px calc(24px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.55) 45%, transparent 100%);
+    color: #ffffff;
+    pointer-events: none;
+}
+
+.PhotoLightboxAutor {
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.PhotoLightboxStars {
+    margin-top: 4px;
     font-size: 13px;
-    font-weight: 600;
+    color: var(--gold, #e0a52f);
+    letter-spacing: 1px;
+}
+
+.PhotoLightboxComentario {
+    margin-top: 8px;
+    font-size: 14px;
+    line-height: 1.45;
+    color: rgba(255, 255, 255, 0.92);
+    /* limita a legenda a poucas linhas pra não engolir a foto inteira num
+       comentário longo — o resto ainda existe na avaliação em si, aqui é
+       só o contexto rápido da foto */
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 
 .PhotoLightboxClose {
-    position: absolute;
-    top: 20px;
+    position: fixed;
+    top: calc(20px + env(safe-area-inset-top, 0px));
     right: 20px;
+    z-index: 2;
     width: 40px;
     height: 40px;
     border: none;
     border-radius: 50%;
-    background-color: rgba(255, 255, 255, 0.12);
+    background-color: rgba(255, 255, 255, 0.16);
     color: #ffffff;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: background-color 0.15s ease;
 }
-.PhotoLightboxClose:active { background-color: rgba(255, 255, 255, 0.24); }
+.PhotoLightboxClose:active { background-color: rgba(255, 255, 255, 0.28); }
 .PhotoLightboxClose svg { width: 18px; height: 18px; }
 
 .ProviderProfileWhatsapp {
@@ -1246,7 +1410,7 @@ footer {
 }
 
 .ProviderProfileSecondaryBtn:active {
-    background-color: var(--paper-tint);
+    background-color: var(--blue-shadow);
     transform: scale(0.97);
 }
 
@@ -1396,7 +1560,7 @@ footer {
     height: 34px;
     border: none;
     border-radius: 50%;
-    background-color: var(--paper-tint);
+    background-color: var(--blue-shadow);
     color: var(--ink-text);
     display: flex;
     align-items: center;
@@ -1576,7 +1740,7 @@ footer {
     flex-shrink: 0;
 }
 
-.TimePickerOption:active { background-color: var(--paper-tint); }
+.TimePickerOption:active { background-color: var(--blue-shadow); }
 
 .TimePickerOption.is-active {
     background-color: var(--ink);
@@ -1625,7 +1789,7 @@ footer {
 .CadastroHint {
     font-size: 12.5px;
     color: var(--muted);
-    background-color: var(--paper-tint);
+    background-color: var(--blue-shadow);
     border-radius: 12px;
     padding: 10px 12px;
 }
@@ -1665,6 +1829,13 @@ footer {
    visível desde o início (ex: "Avaliação enviada!" já aparecendo antes
    de enviar nada), porque a regra do autor vence. */
 .CadastroSuccess[hidden] { display: none; }
+
+/* Mesma correção pro lado oposto: .CadastroForm TAMBÉM define
+   display:flex, então "form.hidden = true" no submit de sucesso (ver
+   abrirAvaliarPrestador em 00-script.js) não escondia o formulário de
+   verdade — o botão ficava preso em "Enviando..." visível ao lado do
+   card de sucesso, em vez de sumir. */
+.CadastroForm[hidden] { display: none; }
 
 .CadastroSuccess svg {
     width: 20px;
@@ -1729,7 +1900,7 @@ footer {
 
 .FotosPrestadorCapaTile.is-empty {
     border: 2px dashed var(--border);
-    background-color: var(--paper-tint);
+    background-color: var(--blue-shadow);
 }
 
 .FotosPrestadorCapaTileLabel {
@@ -1910,7 +2081,7 @@ footer {
 }
 
 .FotosPrestadorCancelarBtn {
-    background-color: var(--paper-tint);
+    background-color: var(--blue-shadow);
     color: var(--ink-text);
 }
 
@@ -2017,7 +2188,7 @@ footer {
 .CadastroMeusVazio {
     font-size: 13px;
     color: var(--muted);
-    background-color: var(--paper-tint);
+    background-color: var(--blue-shadow);
     border-radius: 14px;
     padding: 16px;
     text-align: center;
@@ -2040,7 +2211,7 @@ footer {
 .CadastroMeusCard {
     padding: 14px 14px 12px;
     border-radius: 16px;
-    background-color: var(--paper-tint);
+    background-color: var(--blue-shadow);
     border: 1px solid var(--border);
 }
 
@@ -2126,7 +2297,7 @@ footer {
 }
 
 .CadastroNovoBtn svg { width: 16px; height: 16px; }
-.CadastroNovoBtn:active { background-color: var(--paper-tint); }
+.CadastroNovoBtn:active { background-color: var(--blue-shadow); }
 .CadastroNovoBtn[hidden] { display: none; }
 
 .CadastroFormSection {
@@ -2199,7 +2370,7 @@ footer {
     height: 180px;
     border-radius: 14px;
     overflow: hidden;
-    background-color: var(--paper-tint);
+    background-color: var(--blue-shadow);
 }
 
 .CadastroMapPicker gmp-map {
@@ -2229,7 +2400,7 @@ footer {
     font-size: 14.5px;
 }
 
-.CadastroCancelarBtn:active { background-color: var(--paper-tint); }
+.CadastroCancelarBtn:active { background-color: var(--blue-shadow); }
 
 /* ==========================================================================
    MODAL DE CONFIRMAÇÃO — usado hoje pra "remover cadastro?" (ver
@@ -2286,7 +2457,7 @@ footer {
 }
 
 .ConfirmModalBtn--cancelar {
-    background-color: var(--paper-tint);
+    background-color: var(--blue-shadow);
     color: var(--ink-text);
 }
 .ConfirmModalBtn--cancelar:active { background-color: var(--border); }
@@ -2322,7 +2493,19 @@ footer {
 .AvaliacaoPendenteItem {
     padding: 12px 14px;
     border-radius: 14px;
-    background-color: var(--paper-tint);
+    background-color: var(--blue-shadow);
+}
+
+/* Destaque temporário quando se chega aqui pela notificação do sino (ver
+   focarAvaliacoesPendentesDoPrestador() em 00-script.js) — pisca 2x e a
+   própria classe se remove no fim (animationend), não precisa de timer. */
+.AvaliacaoPendenteItem.is-focado {
+    animation: avaliacao-pendente-piscar 0.7s ease 2;
+}
+
+@keyframes avaliacao-pendente-piscar {
+    0%, 100% { background-color: var(--blue-shadow); }
+    50% { background-color: var(--gold-tint); }
 }
 
 .AvaliacaoPendenteHeader {
@@ -2332,10 +2515,41 @@ footer {
     gap: 8px;
 }
 
+/* Faltava isso inteiro: .AvaliacaoPendenteAvatar (montado por
+   avatarClienteHTML(), ver 00-script.js) já ia no HTML de cada card, mas
+   sem largura/altura/border-radius o navegador renderiza como <div>
+   comum — na prática, invisível. Mesmo tamanho/formato de
+   .ProviderProfileReviewAvatar (as reviews já publicadas no perfil
+   público), só um pouco menor (28px) porque aqui o nome divide a linha
+   com o prazo "expira em Xd" do outro lado. */
+.AvaliacaoPendenteAutorRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.AvaliacaoPendenteAvatar {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background-color: var(--ink);
+    color: var(--paper);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 12px;
+}
+
 .AvaliacaoPendenteAutor {
     font-size: 13.5px;
     font-weight: 700;
     color: var(--ink-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .AvaliacaoPendentePrazo {
@@ -2541,7 +2755,7 @@ footer {
     text-align: left;
     transition: background-color 0.15s ease, transform 0.1s ease;
 }
-.ProfileMenuItem:active { transform: scale(0.98); background-color: var(--paper-tint); }
+.ProfileMenuItem:active { transform: scale(0.98); background-color: var(--blue-shadow); }
 .ProfileMenuItem svg { width: 20px; height: 20px; color: var(--muted); flex-shrink: 0; }
 /* !important pelo mesmo motivo: ".ProfileMenuItem svg" (classe+tag) tem
    mais especificidade que ".ProfileMenuItemChevron" sozinha, e fixaria o
@@ -2559,10 +2773,12 @@ footer {
     -webkit-overflow-scrolling: touch;
 }
 
+/* Mesmo motivo do padding-top em .SavedPageTitle: reserva espaço pro sino
+   fixo que fica em cima de todas as abas. */
 .SettingsWrap {
     max-width: 480px;
     margin: 0 auto;
-    padding: 24px 20px 100px;
+    padding: 76px 20px 100px;
 }
 
 .SettingsTitle {
@@ -2657,7 +2873,7 @@ footer {
 .SettingsLinkRow svg { width: 16px; height: 16px; color: var(--muted); flex-shrink: 0; }
 .SettingsLinkRow:first-of-type { border-radius: 14px 14px 0 0; }
 .SettingsLinkRow:last-of-type { border-radius: 0 0 14px 14px; border-top: none; }
-.SettingsLinkRow:active { background-color: var(--paper-tint); }
+.SettingsLinkRow:active { background-color: var(--blue-shadow); }
 
 .SettingsDangerRow {
     width: 100%;
@@ -2671,7 +2887,7 @@ footer {
     font-weight: 700;
     text-align: center;
 }
-.SettingsDangerRow:active { background-color: var(--paper-tint); }
+.SettingsDangerRow:active { background-color: var(--blue-shadow); }
 
 /* Switch simples on/off — estado visual controlado via classe .is-on
    (aplicarEstadoToggle em script.js), não só aria-checked. */
@@ -2820,7 +3036,7 @@ footer {
     font-weight: 600;
     text-align: left;
 }
-.RadiusPanelOption:active { background-color: var(--paper-tint); }
+.RadiusPanelOption:active { background-color: var(--blue-shadow); }
 .RadiusPanelOption.is-active {
     background-color: var(--ink);
     color: var(--paper);
@@ -3018,3 +3234,329 @@ footer {
                         transition: background-color 0.15s ease;
                     }
                     .MapPopupVerPerfil:active { background-color: #f2efe8; }
+
+/*///////////////////// Sino de notificações  ///////////////////////*/
+/* Mesma família visual do RecenterButton/RadiusToggle (.CircleBtn +
+   .ThemedControl, ver comentário lá em cima) — mas fica FORA do
+   .MapControls porque precisa continuar visível em qualquer aba (Home,
+   Salvos, Perfil, Menu), não só sobre o mapa. position:fixed (não
+   absolute) por isso: não tem um ancestral posicionado em comum com o
+   resto do app, é relativo à viewport mesmo.
+   CANTO ESQUERDO de propósito: o direito já é ocupado pelo FindButton
+   dentro do SearchRow (ver .SearchWrap) — colocar o sino ali em cima
+   colide os dois no mobile, onde a margem lateral do header é pequena. O
+   esquerdo fica livre em todas as páginas (Home/Salvos/Perfil/Menu).
+   z-index 20: acima do header/Dock/MapControls (10/10/5), abaixo dos
+   overlays de tela cheia (.ProviderProfile é 30, cadastro é 999) — assim,
+   quando um perfil ou o cadastro abre por cima, o sino some sozinho sem
+   precisar de JS pra escondê-lo. */
+/* Pontinho vermelho no ícone Perfil do Dock — substitui o sino flutuante
+   antigo. Só um indicador (sem número, ver .ProfileMenuItemBadge pra
+   contagem de verdade dentro do Perfil); .NavIcon já é position:relative
+   (ver regra global lá em cima), então só posiciona o ponto em cima. */
+.DockNotifDot {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 9px;
+    height: 9px;
+    border-radius: 999px;
+    background-color: var(--gold);
+}
+.DockNotifDot[hidden] { display: none; }
+
+/* Badge de contagem dentro do item "Notificações" do menu do Perfil —
+   mesmo desenho do antigo .NotifBellBadge (anel contornando, --danger),
+   só que posicionado inline antes do chevron em vez de sobre um ícone. */
+.ProfileMenuItemBadge {
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background-color: var(--gold);
+    color: #ffffff;
+    font-family: var(--font-body);
+    font-size: 11.5px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: auto;
+}
+.ProfileMenuItemBadge[hidden] { display: none; }
+/* quando o badge aparece, ele que fica colado no chevron — o chevron
+   perde o margin-left:auto próprio (senão os dois brigam pelo mesmo
+   espaço automático) */
+#btnAbrirNotificacoes .ProfileMenuItemChevron { margin-left: 0 !important; }
+
+/* Painel de notificações — agora reaproveita o MESMO chrome de tela cheia
+   que "Preferências da conta" e "Gerenciar meus serviços" já usam
+   (.ProviderProfile + .CadastroOverlayHeader, ver mais acima no arquivo)
+   em vez de ser a única folha flutuante sobre fundo escurecido do menu do
+   Perfil. .NotifOverlay não precisa de regras próprias além do que
+   .ProviderProfile já dá (fixed, inset:0, fundo var(--paper), scroll da
+   PÁGINA inteira) — só o agrupamento do botão "Marcar tudo" + fechar no
+   header, que os outros overlays não têm. */
+.NotifOverlayHeaderActions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-shrink: 0;
+}
+
+.NotifPanelMarkAll {
+    background: none;
+    border: none;
+    color: var(--soft-blue);
+    font-family: var(--font-body);
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 4px;
+    white-space: nowrap;
+}
+
+.NotifList {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+
+.NotifItem {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    border-radius: 14px;
+    padding: 13px 10px;
+    cursor: pointer;
+    color: inherit;
+    font-family: var(--font-body);
+    transition: background-color 0.15s ease;
+}
+
+/* Antigamente só existia um gap de 2px entre os itens (sem separação
+   real), então duas notificações emendavam sem dar pra perceber onde uma
+   parava e a outra começava — trocado por um gap de verdade em
+   .NotifList acima, que deixa os cantos arredondados de cada card
+   aparecerem por inteiro. .NotifItem.is-unread tem fundo próprio
+   (--gold-tint) mesmo sem estar "ativo"/hover — é o que dá o contorno de
+   card visível mesmo lado a lado com outro item igual. */
+
+.NotifItem:active { background-color: var(--blue-shadow); }
+@media (hover: hover) {
+    .NotifItem:hover { background-color: var(--blue-shadow); }
+}
+
+.NotifItem.is-unread { background-color: var(--blue-shadow);}
+
+/* Bolinha de não-lida ganhou coluna própria (não é mais um ::before
+   dentro do texto do título) — mesmo princípio do .StatusBadge--aberto
+   (cor comunica o estado), só que agora com respiro real em vez de
+   espremida colada na primeira letra do título. margin-top alinha ela
+   com a altura-x do título, não com o topo do item inteiro. */
+.NotifItemDot {
+    flex-shrink: 0;
+    width: 7px;
+    height: 7px;
+    margin-top: 6px;
+    border-radius: 999px;
+    background-color: transparent;
+}
+.NotifItem.is-unread .NotifItemDot { background-color: var(--gold);}
+
+.NotifItemBody { flex: 1; min-width: 0; }
+
+/* Título e "há quanto tempo" na MESMA linha, tempo alinhado à direita —
+   é o padrão de central de notificação de verdade (Gmail, Slack, Linear):
+   o "quando" é metadado, não deveria competir por atenção empilhado
+   embaixo do corpo como estava antes. */
+.NotifItemTopRow {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.NotifItemTitulo {
+    font-family: var(--font-display);
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--ink-text);
+    line-height: 1.3;
+}
+
+.NotifItemTempo {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+/* Corpo mais leve e mais espaçado que o título (13px/400 vs 14.5px/600)
+   — hierarquia real em vez dos dois ficarem só 1px de diferença um do
+   outro como antes. line-height 1.5 (era 1.4) dá mais respiro em texto
+   de 2-3 linhas. */
+.NotifItemCorpo {
+    margin-top: 3px;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--muted);
+    line-height: 1.5;
+}
+
+.NotifEmpty {
+    padding: 24px 16px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+
+/*/////////////////////////////////////////*/
+
+
+/* ==========================================================================
+   BANNER DE LEMBRETE ("notificação estilo iPhone") — ver
+   08-lembrete-expiracao.js. Fixo no topo, fora da tela por padrão
+   (translateY negativo), desliza pra dentro ao ganhar .is-visible.
+   z-index acima do Dock/overlays: é uma interrupção deliberada, não pode
+   ficar atrás de nada.
+   ========================================================================== */
+.BannerLembrete {
+    position: fixed;
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    left: 50%;
+    width: min(92vw, 400px);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 15px;
+    background: color-mix(in srgb, var(--paper) 80%, transparent);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-radius: 20px;
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.06),
+        0 10px 30px rgba(0, 0, 0, 0.16),
+        0 0 0 0.5px rgba(0, 0, 0, 0.04);
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    font-family: var(--font-body);
+    z-index: 10000;
+    opacity: 0;
+    transform: translate(-50%, calc(-130% - env(safe-area-inset-top, 0px))) scale(0.94);
+    /* Entrada: spring com leve overshoot (passa um pouco do ponto final e
+       assenta) — é esse pequeno "estica e volta" que faz a notificação
+       parecer viva em vez de só deslizar em linha reta. Opacity termina
+       bem mais rápido que o transform, senão o banner "aparece" tarde
+       demais e some o efeito de espremer. */
+    transition:
+        transform 0.62s cubic-bezier(0.34, 1.56, 0.64, 1),
+        opacity 0.22s ease-out;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.BannerLembrete.is-visible {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+}
+
+/* Saída: rápida, direta, sem overshoot nenhum — sai andando mais rápido
+   do que entrou e desaparece antes de terminar de sair da tela, igual o
+   banner nativo faz ao ser dispensado (seja por toque, arrasto ou
+   timeout). */
+.BannerLembrete.is-leaving {
+    opacity: 0;
+    transform: translate(-50%, calc(-115% - env(safe-area-inset-top, 0px))) scale(0.96);
+    transition:
+        transform 0.32s cubic-bezier(0.4, 0, 1, 1),
+        opacity 0.28s ease-in;
+}
+
+.BannerLembrete.is-arrastando {
+    transition: none;
+}
+
+/* Leve "prensada" ao tocar — sinaliza que é tocável sem precisar de texto
+   tipo "toque para ver". */
+.BannerLembrete:active {
+    transform: translate(-50%, 0) scale(0.97);
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.06),
+        0 6px 18px rgba(0, 0, 0, 0.14),
+        0 0 0 0.5px rgba(0, 0, 0, 0.04);
+}
+
+.BannerLembreteIcone {
+    flex: 0 0 auto;
+    display: flex;
+}
+
+/* Ícone padrão (relógio/sino) — usado quando não há UM autor específico
+   pra personalizar (várias notificações ao mesmo tempo, ou tipo sem
+   pessoa associada — ver iconeNotificacao em 08-lembrete-expiracao.js). */
+.BannerLembreteIconeRelogio {
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+    background: linear-gradient(160deg, var(--gold-soft), var(--gold));
+    color: var(--paper);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.BannerLembreteIconeRelogio svg {
+    width: 19px;
+    height: 19px;
+}
+
+/* Avatar do autor — mesmo padrão visual de .AvaliacaoPendenteAvatar
+   (montado por avatarClienteHTML() em 00-script.js: inicial + <img> por
+   cima, some se a foto falhar), só maior porque aqui é a "capa" do
+   banner, não um detalhe de linha. ESSA CLASSE É A QUE ESTAVA FALTANDO —
+   sem ela, o <div class="BannerLembreteAvatar"> que avatarClienteHTML()
+   monta não tinha largura/altura/formato nenhum, ficava invisível. */
+.BannerLembreteAvatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background-color: var(--ink);
+    color: var(--paper);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.BannerLembreteCorpo {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.BannerLembreteTitulo {
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--ink);
+    line-height: 1.32;
+    letter-spacing: -0.01em;
+}
+
+.BannerLembreteTexto {
+    font-size: 13px;
+    color: var(--ink-2);
+    line-height: 1.35;
+    margin-top: 1px;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
