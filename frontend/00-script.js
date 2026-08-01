@@ -80,6 +80,92 @@ function formatarHora(horaDecimal) {
     return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+// ==========================================================================
+// MÁSCARA DE TELEFONE — formata ao vivo enquanto a pessoa digita, no
+// padrão (XX) XXXX-XXXX (fixo, 10 dígitos) ou (XX) XXXXX-XXXX (celular,
+// 11 dígitos), decidindo sozinha qual dos dois conforme a quantidade de
+// dígitos já digitados. Só cosmético — quem valida de verdade continua
+// sendo telefoneValido() no cliente e validarTelefone() no servidor (ver
+// routes/prestadores.js), os dois olhando só os dígitos, nunca essa
+// pontuação.
+function mascararTelefone(valor) {
+    const digitos = String(valor || "").replace(/\D/g, "").slice(0, 11);
+    if (digitos.length === 0) return "";
+    if (digitos.length <= 2) return `(${digitos}`;
+    if (digitos.length <= 6) return `(${digitos.slice(0, 2)}) ${digitos.slice(2)}`;
+    if (digitos.length <= 10) return `(${digitos.slice(0, 2)}) ${digitos.slice(2, 6)}-${digitos.slice(6)}`;
+    return `(${digitos.slice(0, 2)}) ${digitos.slice(2, 7)}-${digitos.slice(7)}`;
+}
+
+// Aplica a máscara acima a um <input> a cada tecla digitada. Reaproveitado
+// em qualquer campo de telefone do app (hoje: cadastro de prestador,
+// preferências da conta) — então trocar o formato da máscara muda num
+// lugar só.
+function aplicarMascaraTelefone(input) {
+    if (!input) return;
+    input.setAttribute("maxlength", "15"); // "(86) 99999-9999" — 15 caracteres com pontuação
+    input.addEventListener("input", () => {
+        input.value = mascararTelefone(input.value);
+    });
+}
+
+// Mesma regra do backend (validarTelefone em routes/prestadores.js e
+// routes/usuarios.js) — só pra avisar sem esperar a rede; quem decide de
+// verdade continua sendo o servidor (nunca confiar só na validação do
+// cliente).
+function telefoneValido(telefone) {
+    const digitos = String(telefone || "").replace(/\D/g, "");
+    if (digitos.length !== 10 && digitos.length !== 11) return false;
+    const ddd = Number(digitos.slice(0, 2));
+    return ddd >= 11 && ddd <= 99;
+}
+
+// Auto-formata CPF (000.000.000-00, 11 dígitos) ou CNPJ (00.000.000/0000-00,
+// 14 dígitos) enquanto a pessoa digita — decide sozinha qual dos dois
+// formatos aplicar conforme a quantidade de dígitos já digitados, mesmo
+// princípio de mascararTelefone() logo acima. Cosmético só: quem valida
+// de verdade é cpfCnpjValido() no cliente e validarCpfCnpj() no servidor
+// (ver utils/cpfCnpj.js) — e mesmo essa validação é só de FORMATO (11 ou
+// 14 dígitos), nunca confere se o número existe de verdade (ver decisão
+// do produto: é auto-declarado, não verificado — o selo mostra "CPF/CNPJ
+// cadastrado", nunca "verificado").
+function mascararCpfCnpj(valor) {
+    const digitos = String(valor || "").replace(/\D/g, "").slice(0, 14);
+    if (digitos.length === 0) return "";
+
+    // Até 11 dígitos digitados, assume que é um CPF em progresso — só
+    // "vira" CNPJ (formato diferente, com barra) quando a pessoa
+    // realmente passa de 11 dígitos. Sem isso, um CPF de 11 dígitos
+    // ainda incompleto (ex: alguém digitando devagar) ficaria oscilando
+    // de formato a cada tecla.
+    if (digitos.length <= 11) {
+        if (digitos.length <= 3) return digitos;
+        if (digitos.length <= 6) return `${digitos.slice(0, 3)}.${digitos.slice(3)}`;
+        if (digitos.length <= 9) return `${digitos.slice(0, 3)}.${digitos.slice(3, 6)}.${digitos.slice(6)}`;
+        return `${digitos.slice(0, 3)}.${digitos.slice(3, 6)}.${digitos.slice(6, 9)}-${digitos.slice(9)}`;
+    }
+
+    return `${digitos.slice(0, 2)}.${digitos.slice(2, 5)}.${digitos.slice(5, 8)}/${digitos.slice(8, 12)}-${digitos.slice(12)}`;
+}
+
+// Aplica a máscara acima a um <input> a cada tecla digitada — mesmo
+// padrão de aplicarMascaraTelefone() logo acima.
+function aplicarMascaraCpfCnpj(input) {
+    if (!input) return;
+    input.setAttribute("maxlength", "18"); // "00.000.000/0000-00" — 18 caracteres com pontuação
+    input.addEventListener("input", () => {
+        input.value = mascararCpfCnpj(input.value);
+    });
+}
+
+// Mesma regra do backend (validarCpfCnpj em utils/cpfCnpj.js) — só
+// checagem de FORMATO (11 ou 14 dígitos), nunca se o número existe de
+// verdade. Ver comentário de mascararCpfCnpj() acima sobre o porquê.
+function cpfCnpjValido(valor) {
+    const digitos = String(valor || "").replace(/\D/g, "");
+    return digitos.length === 11 || digitos.length === 14;
+}
+
 function horarioTextoPrestador(prestador) {
     if (!prestador.horario) return "";
     const diasTexto = textoDiasSemana(prestador.horario.dias);
@@ -109,6 +195,26 @@ function statusHorarioHTML(prestador) {
 
 function badgeHorarioHTML(prestador) {
     return statusBadgeHTML(prestador) + statusHorarioHTML(prestador);
+}
+
+// Selo "CPF/CNPJ cadastrado" — NÃO diz "verificado" de propósito: o app
+// não confere identidade nenhuma (ver validarCpfCnpj em utils/cpfCnpj.js
+// no backend — só checa quantidade de dígitos, nunca consulta a Receita),
+// então prometer "verificado" seria enganoso. Vale pra TODOS os
+// prestadores da mesma conta (documentoCadastrado já vem calculado assim
+// de formatarPrestador.js, é a pessoa que declarou o documento, não o
+// cadastro individual). Ícone sozinho (sem texto ao lado) porque aparece
+// colado no nome em espaços apertados (lista de resultados) — o `title`
+// cobre quem passar o mouse/segurar o toque.
+function seloDocumentoHTML(prestador) {
+    if (!prestador.documentoCadastrado) return "";
+    return `
+        <svg class="SeloDocumento" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
+            aria-label="CPF/CNPJ cadastrado" role="img">
+            <title>CPF/CNPJ cadastrado — informação declarada, não verificada pelo Mase</title>
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M9.55879 3.6972C10.7552 2.02216 13.2447 2.02216 14.4412 3.6972L14.6317 3.96387C14.8422 4.25867 15.1958 4.41652 15.5558 4.37652L16.4048 4.28218C18.3156 4.06988 19.9301 5.68439 19.7178 7.59513L19.6235 8.44415C19.5835 8.8042 19.7413 9.15774 20.0361 9.36831L20.3028 9.55879C21.9778 10.7552 21.9778 13.2447 20.3028 14.4412L20.0361 14.6317C19.7413 14.8422 19.5835 15.1958 19.6235 15.5558L19.7178 16.4048C19.9301 18.3156 18.3156 19.9301 16.4048 19.7178L15.5558 19.6235C15.1958 19.5835 14.8422 19.7413 14.6317 20.0361L14.4412 20.3028C13.2447 21.9778 10.7553 21.9778 9.55879 20.3028L9.36831 20.0361C9.15774 19.7413 8.8042 19.5835 8.44414 19.6235L7.59513 19.7178C5.68439 19.9301 4.06988 18.3156 4.28218 16.4048L4.37652 15.5558C4.41652 15.1958 4.25867 14.8422 3.96387 14.6317L3.6972 14.4412C2.02216 13.2447 2.02216 10.7553 3.6972 9.55879L3.96387 9.36831C4.25867 9.15774 4.41652 8.8042 4.37652 8.44414L4.28218 7.59513C4.06988 5.68439 5.68439 4.06988 7.59513 4.28218L8.44415 4.37652C8.8042 4.41652 9.15774 4.25867 9.36831 3.96387L9.55879 3.6972ZM15.7071 9.29289C16.0976 9.68342 16.0976 10.3166 15.7071 10.7071L11.8882 14.526C11.3977 15.0166 10.6023 15.0166 10.1118 14.526L8.29289 12.7071C7.90237 12.3166 7.90237 11.6834 8.29289 11.2929C8.68342 10.9024 9.31658 10.9024 9.70711 11.2929L11 12.5858L14.2929 9.29289C14.6834 8.90237 15.3166 8.90237 15.7071 9.29289Z" fill="var(--soft-blue)"></path>
+        </svg>
+    `;
 }
 
 /* ==========================================================================
@@ -448,7 +554,11 @@ function mapearPrestadorDoBackend(p) {
         avatarUrl: p.avatarUrl || null,
         avatarCustomizado: p.avatarCustomizado || 0,
         nota: p.nota,
-        capaTipo: p.capaTipo || "foto"
+        capaTipo: p.capaTipo || "foto",
+        // Sem isso, seloDocumentoHTML() nunca via o valor (undefined) pra
+        // qualquer prestador que passasse pela busca/mapa — o backend
+        // manda certo, esse mapeador que descartava no caminho.
+        documentoCadastrado: p.documentoCadastrado
     };
 }
 
@@ -457,10 +567,10 @@ function mapearPrestadorDoBackend(p) {
 // (classe CSS is-empty, omitir contagem, etc.), aqui só o texto.
 function textoNotaPrestador(nota) {
     if (!nota || nota.quantidade === 0) {
-        return { 
-            temNota: false, 
-            estrelas: `★`, 
-            contagem: "n/a" 
+        return {
+            temNota: false,
+            estrelas: `★`,
+            contagem: "n/a"
         };
     }
 
@@ -566,7 +676,7 @@ async function alternarPrestadorSalvo(id) {
 let usuarioLogado = false;
 let usuarioId = null;
 let tokenSessao = null; // JWT assinado pelo servidor (ver middleware/identidade.js) — prova quem é a pessoa, o id sozinho não prova mais nada
-let perfilUsuarioCache = { nome: "Você", email: "", telefone: "", avatarUrl: null, avatarCustomizado: 0 };
+let perfilUsuarioCache = { nome: "Você", email: "", telefone: "", cpfCnpj: "", avatarUrl: null, avatarCustomizado: 0 };
 
 // Monta os headers de autenticação (Authorization: Bearer <token>) pra
 // misturar com outros headers da request (ex: Content-Type). Sem sessão
@@ -692,7 +802,7 @@ async function entrarComGoogle(credential) {
     usuarioId = usuario.id;
     tokenSessao = usuario.token;
     usuarioLogado = true;
-    perfilUsuarioCache = { nome: usuario.nome, email: usuario.email, telefone: usuario.telefone, avatarUrl: usuario.avatarUrl, avatarCustomizado: usuario.avatarCustomizado || 0 };
+    perfilUsuarioCache = { nome: usuario.nome, email: usuario.email, telefone: usuario.telefone, cpfCnpj: usuario.cpfCnpj, avatarUrl: usuario.avatarUrl, avatarCustomizado: usuario.avatarCustomizado || 0 };
     localStorage.setItem(CHAVE_TOKEN_SESSAO, tokenSessao);
     localStorage.setItem(CHAVE_USUARIO_ID, usuarioId); // faltava — restaurarSessao() exige essa chave no próximo refresh, senão sai no primeiro "if (!idSalvo...) return"
     renderizarPaginaPerfil();
@@ -746,7 +856,7 @@ async function restaurarSessao() {
         const usuario = await resp.json();
         usuarioId = usuario.id;
         usuarioLogado = true;
-        perfilUsuarioCache = { nome: usuario.nome, email: usuario.email, telefone: usuario.telefone, avatarUrl: usuario.avatarUrl, avatarCustomizado: usuario.avatarCustomizado || 0 };
+        perfilUsuarioCache = { nome: usuario.nome, email: usuario.email, telefone: usuario.telefone, cpfCnpj: usuario.cpfCnpj, avatarUrl: usuario.avatarUrl, avatarCustomizado: usuario.avatarCustomizado || 0 };
         carregarIdsSalvos(); // idem: não bloqueia, completa em segundo plano
     } catch (erro) {
         console.warn("Sessão salva não é mais válida, saindo:", erro);
@@ -832,6 +942,15 @@ function abrirEditarPerfil() {
                 <span class="CadastroLabel">Nome</span>
                 <input type="text" name="nome" class="CadastroInput" value="${perfilUsuarioCache.nome.replace(/"/g, "&quot;")}" required>
             </label>
+            <label class="CadastroField">
+                <span class="CadastroLabel">Telefone (WhatsApp)</span>
+                <input type="tel" name="telefone" class="CadastroInput" placeholder="(86) 99999-9999" value="${(perfilUsuarioCache.telefone || "").replace(/"/g, "&quot;")}">
+            </label>
+            <label class="CadastroField">
+                <span class="CadastroLabel">CPF ou CNPJ (opcional)</span>
+                <input type="text" inputmode="numeric" name="cpfCnpj" class="CadastroInput" placeholder="000.000.000-00" value="${mascararCpfCnpj(perfilUsuarioCache.cpfCnpj || "").replace(/"/g, "&quot;")}">
+            </label>
+            <div class="CadastroHint">Cadastrando um CPF/CNPJ, seus prestadores ganham o selo "CPF/CNPJ cadastrado" no perfil. Não confere identidade — é uma informação declarada por você, não verificada pelo Mase.</div>
             <div class="CadastroHint">O e-mail (${perfilUsuarioCache.email || "—"}) não pode ser trocado por aqui — é ele quem identifica sua conta, direto da sua conta Google.</div>
             <div class="CadastroErro" id="editarPerfilErro" hidden></div>
             <button type="submit" class="CadastroSubmit">Finalizar</button>
@@ -841,6 +960,12 @@ function abrirEditarPerfil() {
     const form = overlay.querySelector("#editarPerfilForm");
     const erroEl = overlay.querySelector("#editarPerfilErro");
     const botao = form.querySelector(".CadastroSubmit");
+
+    // Auto-formatação: (86) 99999-9999 e 000.000.000-00 aparecem sozinhos
+    // enquanto a pessoa digita. Ver mascararTelefone/mascararCpfCnpj no
+    // topo do arquivo.
+    aplicarMascaraTelefone(form.querySelector('[name="telefone"]'));
+    aplicarMascaraCpfCnpj(form.querySelector('[name="cpfCnpj"]'));
 
     const avatarEl = overlay.querySelector("#editarPerfilAvatar");
     const avatarInput = overlay.querySelector("#editarPerfilAvatarInput");
@@ -934,9 +1059,24 @@ function abrirEditarPerfil() {
 
     form.addEventListener("submit", async (event) => {
         event.preventDefault();
-        const { nome } = Object.fromEntries(new FormData(form).entries());
+        const { nome, telefone, cpfCnpj } = Object.fromEntries(new FormData(form).entries());
 
         erroEl.hidden = true;
+
+        // Telefone e CPF/CNPJ são opcionais aqui (ao contrário do cadastro
+        // de prestador): campo vazio some/limpa o valor salvo. Só valida
+        // formato quando a pessoa de fato digitou algo.
+        if (telefone.trim() && !telefoneValido(telefone)) {
+            erroEl.textContent = "Telefone inválido. Use um número com DDD, ex: (86) 99999-9999.";
+            erroEl.hidden = false;
+            return;
+        }
+        if (cpfCnpj.trim() && !cpfCnpjValido(cpfCnpj)) {
+            erroEl.textContent = "CPF/CNPJ inválido. Confira se digitou todos os dígitos.";
+            erroEl.hidden = false;
+            return;
+        }
+
         botao.disabled = true;
         botao.textContent = "Salvando...";
 
@@ -944,7 +1084,7 @@ function abrirEditarPerfil() {
             const resp = await fetch(`${API_BASE}/usuarios/${usuarioId}`, {
                 method: "PATCH",
                 headers: cabecalhosAuth({ "Content-Type": "application/json" }),
-                body: JSON.stringify({ nome })
+                body: JSON.stringify({ nome, telefone, cpfCnpj })
             });
             if (!resp.ok) {
                 const corpo = await resp.json().catch(() => ({}));
@@ -953,6 +1093,8 @@ function abrirEditarPerfil() {
 
             const atualizado = await resp.json();
             perfilUsuarioCache.nome = atualizado.nome;
+            perfilUsuarioCache.telefone = atualizado.telefone;
+            perfilUsuarioCache.cpfCnpj = atualizado.cpfCnpj;
             renderizarPaginaPerfil();
             fecharOverlayGenerico();
         } catch (erro) {
@@ -1017,9 +1159,7 @@ function iniciarConfiguracoes() {
     });
 
     const mapaToggles = {
-        toggleNotifPush: "notifPush",
-        toggleNotifWhatsapp: "notifWhatsapp",
-        toggleLocalExata: "localExata"
+        toggleNotifPush: "notifPush"
     };
 
     Object.entries(mapaToggles).forEach(([idBotao, chave]) => {
@@ -1237,10 +1377,23 @@ async function renderizarMeusCadastros() {
     if (vazio) vazio.hidden = cadastrados.length > 0;
     lista.hidden = cadastrados.length === 0;
 
-    lista.innerHTML = cadastrados.map(p => `
-        <div class="CadastroMeusCard" data-id="${p.id}">
+    // Telefone repetido entre serviços da mesma conta não é mais um erro
+    // (ver prestadores.js — o 409 de duplicata foi removido: é legítimo um
+    // WhatsApp só atender por mais de um serviço). Isso aqui só monta uma
+    // contagem pra mostrar uma tag BEM sutil no card, sem travar nada.
+    const contagemTelefones = {};
+    cadastrados.forEach(p => {
+        const digitos = String(p.telefone || "").replace(/\D/g, "");
+        contagemTelefones[digitos] = (contagemTelefones[digitos] || 0) + 1;
+    });
+
+    lista.innerHTML = cadastrados.map(p => {
+        const digitos = String(p.telefone || "").replace(/\D/g, "");
+        const telefoneCompartilhado = contagemTelefones[digitos] > 1;
+        return `
+        <div class="CadastroMeusCard" data-id="${p.id}" style="border-color:${p.cor};">
             <div class="CadastroMeusCardTopo">
-                <div class="CadastroMeusCardNome">${p.nome}</div>
+                <div class="CadastroMeusCardNome">${p.nome}${seloDocumentoHTML(p)}</div>
                 <div class="CadastroMeusCardAcoes">
                     <button type="button" class="CadastroMeusCardEditar" aria-label="Editar ${p.nome}">
                         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1259,10 +1412,14 @@ async function renderizarMeusCadastros() {
                 </div>
             </div>
             <div class="CadastroMeusCardCategoria">${p.categoria}</div>
-            <div class="CadastroMeusCardTelefone">${p.telefone}</div>
+            <div class="CadastroMeusCardTelefoneRow">
+                <div class="CadastroMeusCardTelefone">${p.telefone}</div>
+                ${telefoneCompartilhado ? `<span class="CadastroMeusCardTelefoneTag">também em outro serviço</span>` : ""}
+            </div>
             <div class="CadastroMeusCardStatus">${badgeHorarioHTML(p)}</div>
         </div>
-    `).join("");
+    `;
+    }).join("");
 
     lista.querySelectorAll(".CadastroMeusCardEditar").forEach(botao => {
         botao.addEventListener("click", () => {
@@ -1275,7 +1432,11 @@ async function renderizarMeusCadastros() {
     lista.querySelectorAll(".CadastroMeusCardRemover").forEach(botao => {
         botao.addEventListener("click", () => {
             const card = botao.closest(".CadastroMeusCard");
-            const nome = card.querySelector(".CadastroMeusCardNome").textContent;
+            // Lê de `cadastrados` (não via textContent do card) — desde que o
+            // selo de documento virou um <svg><title> dentro desse elemento,
+            // textContent passaria a incluir o texto do title junto do nome.
+            const prestador = cadastrados.find(p => String(p.id) === card.dataset.id);
+            const nome = prestador ? prestador.nome : card.querySelector(".CadastroMeusCardNome").textContent;
 
             abrirConfirmarAcao({
                 titulo: "Remover cadastro?",
@@ -1628,7 +1789,7 @@ async function buscarAvaliacoesPendentes() {
             });
             if (!respFila.ok) throw new Error(`GET .../avaliacoes/pendentes respondeu ${respFila.status}`);
             const fila = await respFila.json();
-            return fila.map(av => ({ ...av, prestadorId: p.id, prestadorNome: p.nome, prestadorCategoria: p.categoria }));
+            return fila.map(av => ({ ...av, prestadorId: p.id, prestadorNome: p.nome, prestadorCategoria: p.categoria, prestadorCor: p.cor }));
         }));
         const pendentes = porPrestador.flat().sort((a, b) => a.criadoEm - b.criadoEm);
         return { pendentes, multiplosCadastros: meusCadastros.length > 1 };
@@ -1648,7 +1809,7 @@ function montarHtmlAvaliacoesPendentes(pendentes, multiplosCadastros) {
         const sobreQuem = multiplosCadastros ? ` · sobre ${av.prestadorNome}` : "";
 
         return `
-            <div class="AvaliacaoPendenteItem" data-id="${av.id}" data-prestador-id="${av.prestadorId}">
+            <div class="AvaliacaoPendenteItem" data-id="${av.id}" data-prestador-id="${av.prestadorId}" style="border-color:${av.prestadorCor};">
                 <div class="AvaliacaoPendenteHeader">
                     <div class="AvaliacaoPendenteAutorRow">
                         ${avatarClienteHTML(av.autorNome, av.autorAvatarUrl, "AvaliacaoPendenteAvatar", av.autorUsuarioId, av.autorAvatarCustomizado)}
@@ -1750,6 +1911,8 @@ function ligarHandlersAvaliacoesPendentes(listaEl, aoDecidir) {
 async function renderizarAvaliacoesPendentes() {
     const section = document.getElementById("avaliacoesPendentesSection");
     const lista = document.getElementById("avaliacoesPendentesList");
+    const toggleBtn = document.getElementById("cadastroAvaliacoesToggleBtn");
+    const toggleTexto = document.getElementById("cadastroAvaliacoesToggleTexto");
     if (!section || !lista) return;
 
     const dados = await buscarAvaliacoesPendentes();
@@ -1757,11 +1920,18 @@ async function renderizarAvaliacoesPendentes() {
     const { pendentes, multiplosCadastros } = dados;
 
     if (pendentes.length === 0) {
+        // Sem nada pra decidir: nem o botão faz sentido aparecer, então
+        // some os dois — e fecha a seção, pra não deixar um "resto" aberto
+        // e vazio caso a última pendência tenha acabado de ser decidida.
         section.hidden = true;
+        if (toggleBtn) {
+            toggleBtn.hidden = true;
+            toggleBtn.classList.remove("is-aberto");
+            toggleBtn.setAttribute("aria-expanded", "false");
+        }
         return;
     }
 
-    section.hidden = false;
     lista.innerHTML = montarHtmlAvaliacoesPendentes(pendentes, multiplosCadastros);
     ligarHandlersAvaliacoesPendentes(lista, async () => {
         await renderizarAvaliacoesPendentes();
@@ -1771,6 +1941,18 @@ async function renderizarAvaliacoesPendentes() {
         // em outra aba/instância.
         if (typeof atualizarBadgeNotificacoes === "function") atualizarBadgeNotificacoes();
     });
+
+    // Só mostra/atualiza o BOTÃO aqui — quem abre/fecha a seção em si é o
+    // clique nele (ver listener em abrirCadastroPrestador). Não mexe em
+    // section.hidden nesta ramificação: se a pessoa já tinha aberto pra
+    // decidir uma e ainda sobrou outra, continua aberta; se estava
+    // fechada, continua fechada até ela clicar.
+    if (toggleBtn) {
+        toggleBtn.hidden = false;
+        if (toggleTexto) {
+            toggleTexto.textContent = `Avaliações pendentes (${pendentes.length})`;
+        }
+    }
 }
 
 // Rola até a seção de avaliações pendentes e pisca as pendências de UM
@@ -1780,10 +1962,23 @@ async function renderizarAvaliacoesPendentes() {
 // lista inteira sem saber qual item era o da notificação que tocou.
 function focarAvaliacoesPendentesDoPrestador(prestadorId) {
     const section = document.getElementById("avaliacoesPendentesSection");
-    if (!section || section.hidden) return; // pode já ter sido decidida/expirado entre a notificação e o clique
+    const toggleBtn = document.getElementById("cadastroAvaliacoesToggleBtn");
+    if (!section) return;
 
     const itens = document.querySelectorAll(`.AvaliacaoPendenteItem[data-prestador-id="${prestadorId}"]`);
-    if (itens.length === 0) return;
+    if (itens.length === 0) return; // já foi decidida/expirou entre a notificação e o clique
+
+    // A seção agora nasce recolhida por padrão (ver botão de alternância em
+    // abrirCadastroPrestador) — chegando aqui direto pela notificação do
+    // sino, sem ter clicado nele antes, precisa abrir sozinha pra o scroll/
+    // piscar abaixo fazerem sentido.
+    if (section.hidden) {
+        section.hidden = false;
+        if (toggleBtn) {
+            toggleBtn.classList.add("is-aberto");
+            toggleBtn.setAttribute("aria-expanded", "true");
+        }
+    }
 
     itens[0].scrollIntoView({ behavior: "smooth", block: "center" });
     itens.forEach(item => {
@@ -1815,7 +2010,7 @@ async function abrirCadastroPrestador(prestadorIdFoco = null) {
             overlay.querySelector("#cadastroCategoriasList").innerHTML =
                 categorias.map(c => `<option value="${String(c).replace(/"/g, "&quot;")}"></option>`).join("");
         })
-        .catch(() => {});
+        .catch(() => { });
 
     // "Sujo" = tem algo que se perderia fechando agora. Não tenta rastrear
     // toda interação possível (chip de dia, opção de horário, ponto no
@@ -1879,6 +2074,26 @@ async function abrirCadastroPrestador(prestadorIdFoco = null) {
     const stepsLabel = overlay.querySelector("#cadastroStepsLabel");
     const stepEls = [...overlay.querySelectorAll(".CadastroStep")];
     const dotEls = [...overlay.querySelectorAll(".CadastroStepDot")];
+
+    // Avaliações pendentes nascem recolhidas (ver #avaliacoesPendentesSection
+    // no template, hidden por padrão) — este botão é o único jeito de
+    // abrir/fechar. Quem decide MOSTRAR o botão em si (quando existe ao
+    // menos 1 pendência) é renderizarAvaliacoesPendentes() mais abaixo.
+    const avaliacoesToggleBtn = overlay.querySelector("#cadastroAvaliacoesToggleBtn");
+    const avaliacoesSection = overlay.querySelector("#avaliacoesPendentesSection");
+    if (avaliacoesToggleBtn && avaliacoesSection) {
+        avaliacoesToggleBtn.addEventListener("click", () => {
+            const vaiAbrir = avaliacoesSection.hidden;
+            avaliacoesSection.hidden = !vaiAbrir;
+            avaliacoesToggleBtn.classList.toggle("is-aberto", vaiAbrir);
+            avaliacoesToggleBtn.setAttribute("aria-expanded", String(vaiAbrir));
+        });
+    }
+
+    // Auto-formatação: (86) 99999-9999 aparece sozinho enquanto a pessoa
+    // digita, sem precisar acertar a pontuação na mão. Ver mascararTelefone
+    // no topo do arquivo.
+    aplicarMascaraTelefone(form.querySelector('[name="telefone"]'));
 
     const TOTAL_PASSOS = stepEls.length; // 4 (Dados, Contato, Horário/local, Fotos)
     const TITULOS_PASSO = { 1: "Dados básicos", 2: "Contato", 3: "Horário e localização", 4: "Fotos" };
@@ -2016,16 +2231,6 @@ async function abrirCadastroPrestador(prestadorIdFoco = null) {
         if (passo === 4) atualizarFontesFotos();
     }
 
-    // Mesma regra do backend (validarTelefone em prestadores.js) — só pra
-    // avisar sem esperar a rede; quem decide de verdade continua sendo o
-    // servidor (nunca confiar só na validação do cliente).
-    function telefoneValido(telefone) {
-        const digitos = String(telefone || "").replace(/\D/g, "");
-        if (digitos.length !== 10 && digitos.length !== 11) return false;
-        const ddd = Number(digitos.slice(0, 2));
-        return ddd >= 11 && ddd <= 99;
-    }
-
     // Valida só os campos do passo atual antes de deixar avançar — o
     // required do HTML já barra vazio; reportValidity() mostra o balão
     // nativo do navegador apontando pro campo certo. Telefone tem uma
@@ -2092,6 +2297,12 @@ async function abrirCadastroPrestador(prestadorIdFoco = null) {
         if (prestador) {
             preencherFormulario(prestador);
             atualizarFontesFotos();
+        } else if (perfilUsuarioCache.telefone) {
+            // Cadastro novo (não edição): já vem com o telefone da conta
+            // (ver "Preferências da conta") como ponto de partida, em vez
+            // de nascer sempre vazio — a pessoa troca se o contato desse
+            // prestador específico for outro número.
+            form.querySelector('[name="telefone"]').value = mascararTelefone(perfilUsuarioCache.telefone);
         }
 
         meusSection.hidden = true;
@@ -3224,10 +3435,10 @@ function abrirLightbox(fotos, indiceInicial) {
         ` : ""}
         <div class="PhotoLightboxTrack">
             ${fotos.map(foto => {
-                const autorSeguro = escapeHTML(foto.autor || "");
-                const comentarioSeguro = foto.comentario ? escapeHTML(foto.comentario) : "";
-                const notaNumero = Number(foto.nota) || 0;
-                return `
+        const autorSeguro = escapeHTML(foto.autor || "");
+        const comentarioSeguro = foto.comentario ? escapeHTML(foto.comentario) : "";
+        const notaNumero = Number(foto.nota) || 0;
+        return `
                     <div class="PhotoLightboxSlide">
                         <img class="PhotoLightboxImg" src="${foto.src}" alt="Foto de serviço enviada por ${autorSeguro}"
                             draggable="false" onerror="this.onerror=null; this.src='${CAPA_PLACEHOLDER}';">
@@ -3238,7 +3449,7 @@ function abrirLightbox(fotos, indiceInicial) {
                         </div>
                     </div>
                 `;
-            }).join("")}
+    }).join("")}
         </div>
     `;
 
@@ -3642,7 +3853,7 @@ async function abrirPerfilPrestador(prestador) {
     }
 
     slot("avatar").outerHTML = avatarHTML(prestador, "ProviderProfileAvatar");
-    slot("nome").textContent = prestador.nome;
+    slot("nome").innerHTML = `${prestador.nome}${seloDocumentoHTML(prestador)}`;
     slot("categoria").textContent = prestador.categoria;
 
     const ratingEl = slot("rating");
@@ -4034,7 +4245,8 @@ function buscarPorCategoria(query, textoExibido) {
    de "buscando de verdade".
    ========================================================================== */
 function mostrarEsqueletoLista(quantidade = 3) {
-    const container = document.getElementById("resultsList");
+    const painel = document.getElementById("resultsList");
+    const container = document.getElementById("resultsListScroll");
     container.innerHTML = "";
 
     for (let i = 0; i < quantidade; i++) {
@@ -4051,7 +4263,7 @@ function mostrarEsqueletoLista(quantidade = 3) {
         container.appendChild(linha);
     }
 
-    container.hidden = false;
+    painel.hidden = false;
 }
 
 /* ==========================================================================
@@ -4089,11 +4301,12 @@ function renderizarEstadoVazio(container) {
 }
 
 function renderizarLista(resultados) {
-    const container = document.getElementById("resultsList");
+    const painel = document.getElementById("resultsList");
+    const container = document.getElementById("resultsListScroll");
     container.innerHTML = "";
 
     if (resultados.length === 0) {
-        container.hidden = false;
+        painel.hidden = false;
         renderizarEstadoVazio(container);
         return;
     }
@@ -4113,7 +4326,7 @@ function renderizarLista(resultados) {
                 ${avatarHTML(prestador, "ResultAvatar")}
                 <div class="ResultInfo">
                     <div class="ResultTopRow">
-                        <div class="ResultName">${prestador.nome}</div>
+                        <div class="ResultName">${prestador.nome}${seloDocumentoHTML(prestador)}</div>
                         <div class="ResultDistance">${formatarDistancia(distancia)}</div>
                     </div>
                     <div class="ResultMeta">
@@ -4140,7 +4353,7 @@ function renderizarLista(resultados) {
         container.appendChild(item);
     });
 
-    container.hidden = false;
+    painel.hidden = false;
 }
 
 /* ==========================================================================
@@ -4212,7 +4425,7 @@ async function renderizarPaginaSalvos() {
             <button type="button" class="SavedItemMain">
                 ${avatarHTML(prestador, "ResultAvatar")}
                 <div class="ResultInfo">
-                    <div class="ResultName">${prestador.nome}</div>
+                    <div class="ResultName">${prestador.nome}${seloDocumentoHTML(prestador)}</div>
                     <div class="ResultMeta">
                         <span>${prestador.categoria}</span>
                         <span class="ResultRating${nota.temNota ? "" : " is-empty"}">${nota.estrelas}</span>

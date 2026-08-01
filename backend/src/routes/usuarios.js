@@ -11,6 +11,8 @@ const { sanitizarTexto } = require("../utils/sanitizar");
 const { exigirUsuario } = require("../middleware/identidade");
 const { formatarPrestador, SELECT_PRESTADORES_COM_NOTA } = require("../utils/formatarPrestador");
 const { criarNotificacao } = require("../utils/criarNotificacao");
+const { validarTelefone } = require("../utils/telefone");
+const { validarCpfCnpj, digitosCpfCnpj } = require("../utils/cpfCnpj");
 
 const router = express.Router();
 
@@ -61,7 +63,7 @@ function receberAvatarUsuario(req, res, next) {
 
 // Mesma SELECT usada no restante do arquivo (GET/PATCH/entrar-google) —
 // evita repetir a lista de colunas com o avatar_customizado embutido.
-const SELECT_USUARIO = "SELECT id, nome, email, telefone, avatar_url AS avatarUrl, avatar_customizado AS avatarCustomizado FROM usuarios WHERE id = ?";
+const SELECT_USUARIO = "SELECT id, nome, email, telefone, cpf_cnpj AS cpfCnpj, avatar_url AS avatarUrl, avatar_customizado AS avatarCustomizado FROM usuarios WHERE id = ?";
 
 // ==========================================================================
 // LOGIN COM GOOGLE — substitui o "entrar por telefone" (que não verificava
@@ -126,7 +128,7 @@ router.post("/entrar-google", async (req, res) => {
     // em contas sem foto configurada (payload simplesmente omite o campo).
     const avatarUrl = payload.picture || null;
 
-    let usuario = db.prepare("SELECT id, nome, email, telefone, avatar_url AS avatarUrl, avatar_customizado AS avatarCustomizado FROM usuarios WHERE google_sub = ?").get(googleSub);
+    let usuario = db.prepare("SELECT id, nome, email, telefone, cpf_cnpj AS cpfCnpj, avatar_url AS avatarUrl, avatar_customizado AS avatarCustomizado FROM usuarios WHERE google_sub = ?").get(googleSub);
 
     if (!usuario) {
         const novo = { id: uuidv4(), nome, email, google_sub: googleSub, avatar_url: avatarUrl, criado_em: Date.now() };
@@ -134,7 +136,7 @@ router.post("/entrar-google", async (req, res) => {
             INSERT INTO usuarios (id, nome, email, google_sub, telefone, avatar_url, criado_em)
             VALUES (@id, @nome, @email, @google_sub, NULL, @avatar_url, @criado_em)
         `).run(novo);
-        usuario = { id: novo.id, nome: novo.nome, email: novo.email, telefone: null, avatarUrl: novo.avatar_url, avatarCustomizado: 0 };
+        usuario = { id: novo.id, nome: novo.nome, email: novo.email, telefone: null, cpfCnpj: null, avatarUrl: novo.avatar_url, avatarCustomizado: 0 };
     } else {
         // Login em conta já existente: a foto do Google pode ter mudado
         // desde o último login — atualiza pra manter em sincronia (é só
@@ -172,9 +174,12 @@ router.get("/:id", exigirUsuario, (req, res) => {
     res.json(usuario);
 });
 
-// PATCH /api/usuarios/:id — editar perfil (hoje só o nome é editável no front;
-// email vem do Google e não é editável por aqui de propósito, é a âncora
-// da conta).
+// PATCH /api/usuarios/:id — editar perfil (nome, telefone e cpfCnpj
+// editáveis no front; email vem do Google e não é editável por aqui de
+// propósito, é a âncora da conta).
+// telefone e cpfCnpj são OPCIONAIS aqui — string vazia é um valor válido
+// e limpa o que estava salvo. Só quando vem algo não-vazio é que precisa
+// passar na validação de formato correspondente.
 router.patch("/:id", exigirUsuario, (req, res) => {
     if (req.usuario.id !== req.params.id) {
         return res.status(403).json({ erro: "Só dá pra editar o próprio perfil." });
@@ -183,7 +188,38 @@ router.patch("/:id", exigirUsuario, (req, res) => {
     const nome = sanitizarTexto(req.body.nome, 80);
     if (!nome) return res.status(400).json({ erro: "nome é obrigatório." });
 
-    db.prepare("UPDATE usuarios SET nome = ? WHERE id = ?").run(nome, req.params.id);
+    const atual = db.prepare("SELECT telefone, cpf_cnpj FROM usuarios WHERE id = ?").get(req.params.id);
+
+    // req.body.telefone === undefined (campo nem veio no corpo, ex: front
+    // em cache mandando só {nome}) preserva o que já estava salvo — só uma
+    // string vazia DE PROPÓSITO ("") é que limpa o telefone.
+    let telefone = atual?.telefone ?? null;
+    if (req.body.telefone !== undefined) {
+        const telefoneBruto = sanitizarTexto(req.body.telefone, 30);
+        if (telefoneBruto && !validarTelefone(telefoneBruto)) {
+            return res.status(400).json({ erro: "Telefone inválido. Use um número com DDD, ex: (86) 99999-9999." });
+        }
+        telefone = telefoneBruto || null;
+    }
+
+    // Mesma lógica do telefone acima: campo ausente preserva, string vazia
+    // limpa. validarCpfCnpj só checa QUANTIDADE de dígitos (11 ou 14) —
+    // não confere dígito verificador nem consulta a Receita, é
+    // auto-declarado de propósito (ver utils/cpfCnpj.js).
+    let cpfCnpj = atual?.cpf_cnpj ?? null;
+    if (req.body.cpfCnpj !== undefined) {
+        const cpfCnpjBruto = sanitizarTexto(req.body.cpfCnpj, 20);
+        if (cpfCnpjBruto && !validarCpfCnpj(cpfCnpjBruto)) {
+            return res.status(400).json({ erro: "CPF/CNPJ inválido. Use 11 dígitos (CPF) ou 14 (CNPJ)." });
+        }
+        // Salva só os dígitos (o front manda mascarado, ex: "123.456.789-01")
+        // — formatação é reaplicada na hora de exibir (ver mascararCpfCnpj em
+        // 00-script.js), não faz sentido guardar pontuação no banco (ver
+        // comentário da migração cpf_cnpj em db.js).
+        cpfCnpj = cpfCnpjBruto ? digitosCpfCnpj(cpfCnpjBruto) : null;
+    }
+
+    db.prepare("UPDATE usuarios SET nome = ?, telefone = ?, cpf_cnpj = ? WHERE id = ?").run(nome, telefone, cpfCnpj, req.params.id);
     // Reconsulta em vez de montar a mão: evita depender de exigirUsuario
     // já trazer avatarUrl no formato certo (req.usuario vem do middleware,
     // que pode ter sido escrito antes dessa coluna existir).

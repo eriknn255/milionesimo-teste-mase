@@ -15,23 +15,27 @@ const db = require("../db");
 const { sanitizarTexto } = require("../utils/sanitizar");
 const { exigirUsuario } = require("../middleware/identidade");
 const { formatarPrestador, SELECT_PRESTADORES_COM_NOTA } = require("../utils/formatarPrestador");
+const { validarTelefone } = require("../utils/telefone");
 
 const router = express.Router();
 
 // ==========================================================================
-// LIMITE DE CADASTROS + VALIDAÇÃO DE TELEFONE + DUPLICATA
+// LIMITE DE CADASTROS + VALIDAÇÃO DE TELEFONE
 // Sem isso, uma única conta Google (livre pra criar quantas quiser) podia
 // encher o mapa de cadastros — inclusive com telefone em qualquer formato,
-// nem que fosse "abc". Três camadas, cada uma barrando um abuso diferente:
+// nem que fosse "abc". Duas camadas, cada uma barrando um abuso diferente:
 //   1) LIMITE_PRESTADORES_POR_CONTA — teto por conta (spam grosseiro).
 //   2) validarTelefone — recusa string que não é um telefone BR de verdade.
-//   3) checagem de duplicata — recusa nome+telefone repetido entre
-//      QUALQUER prestador (não só os desta conta), pega tanto o duplo
-//      clique quanto tentativa de reclonar um anúncio com conta nova.
-// Nenhuma das três impede alguém disposto a criar 3 contas Google
+// Nenhuma das duas impede alguém disposto a criar 3 contas Google
 // diferentes pra ter 9 cadastros — isso só uma verificação de telefone
 // por SMS resolveria de verdade, e é bem mais trabalho. Isto aqui é a
 // barreira barata contra o abuso casual.
+//
+// NÃO existe mais checagem de telefone duplicado entre prestadores da
+// mesma conta — é legítimo um WhatsApp só atender por mais de um serviço
+// (ex: a mesma pessoa faz "Eletricista" e "Encanador"). O front só sinaliza
+// isso de forma sutil (tag em "Meus Serviços", ver renderizarMeusCadastros
+// em 00-script.js), nunca bloqueia.
 // ==========================================================================
 const LIMITE_PRESTADORES_POR_CONTA = 3;
 
@@ -57,21 +61,6 @@ function normalizarDiasSemana(diasSemana) {
     if (!Array.isArray(diasSemana)) return [0, 1, 2, 3, 4, 5, 6];
     const validos = [...new Set(diasSemana.filter(d => Number.isInteger(d) && d >= 0 && d <= 6))];
     return validos.length > 0 ? validos : [0, 1, 2, 3, 4, 5, 6];
-}
-
-function digitosTelefone(telefone) {
-    return String(telefone || "").replace(/\D/g, "");
-}
-
-// Telefone BR: 10 dígitos (fixo, DDD + 8) ou 11 (celular, DDD + 9), com
-// DDD válido (11 a 99 — não existe DDD começando em 0 ou "00"). Não
-// valida se o número existe de verdade (só um SMS faria isso), só barra
-// o caso óbvio de string aleatória no campo.
-function validarTelefone(telefone) {
-    const digitos = digitosTelefone(telefone);
-    if (digitos.length !== 10 && digitos.length !== 11) return false;
-    const ddd = Number(digitos.slice(0, 2));
-    return ddd >= 11 && ddd <= 99;
 }
 
 // GET /api/prestadores
@@ -143,21 +132,6 @@ router.post("/", exigirUsuario, (req, res) => {
         .get(req.usuario.id).total;
     if (totalDoUsuario >= LIMITE_PRESTADORES_POR_CONTA) {
         return res.status(400).json({ erro: `Você atingiu o limite de ${LIMITE_PRESTADORES_POR_CONTA} cadastros por conta.` });
-    }
-
-    // Duplicata: mesma conta cadastrando o mesmo telefone duas vezes (o
-    // caso real de "clicou duas vezes" ou "esqueci que já cadastrei esse
-    // número"). Antes essa checagem comparava nome+telefone contra TODOS
-    // os prestadores — deixou de fazer sentido porque nome não é mais
-    // escolhido na hora do cadastro (é herdado da conta), então duas
-    // pessoas diferentes com o mesmo nome de conta não deveriam trombar
-    // uma checagem de duplicata por causa disso. Escopada só nos
-    // prestadores DESSA conta (no máximo 3, então nem precisa de índice).
-    const telefoneNormalizado = digitosTelefone(telefone);
-    const jaExiste = db.prepare("SELECT telefone FROM prestadores WHERE dono_usuario_id = ?").all(req.usuario.id)
-        .some(p => digitosTelefone(p.telefone) === telefoneNormalizado);
-    if (jaExiste) {
-        return res.status(409).json({ erro: "Você já tem um prestador cadastrado com esse telefone." });
     }
 
     const tags = ["/all", normalizarTag(categoria)]
@@ -238,17 +212,6 @@ router.patch("/:id", exigirUsuario, exigirDono, (req, res) => {
     }
     if (!validarTelefone(telefone)) {
         return res.status(400).json({ erro: "Telefone inválido. Use um número com DDD, ex: (86) 99999-9999." });
-    }
-
-    // mesma checagem de duplicata do POST (telefone repetido dentro da
-    // mesma conta), ignorando o próprio registro — senão editar sem
-    // trocar o telefone já acusaria "duplicata" dele mesmo.
-    const telefoneNormalizado = digitosTelefone(telefone);
-    const duplicado = db.prepare("SELECT telefone FROM prestadores WHERE dono_usuario_id = ? AND id != ?")
-        .all(req.usuario.id, req.params.id)
-        .some(p => digitosTelefone(p.telefone) === telefoneNormalizado);
-    if (duplicado) {
-        return res.status(409).json({ erro: "Você já tem outro prestador cadastrado com esse telefone." });
     }
 
     // tagsTexto: se não veio no corpo, preserva as tags extras que já

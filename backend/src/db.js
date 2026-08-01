@@ -31,23 +31,6 @@ if (!colunasAvaliacoes.some(c => c.name === "foto_url")) {
     console.log("[db] migração aplicada: avaliacoes.foto_url");
 }
 
-// foto_url2/foto_url3: a tela de avaliação passou a ter 3 slots de foto
-// (nenhum obrigatório), não só 1 — ver routes/avaliacoes.js
-// (salvarFotosAvaliacao) e abrirAvaliarPrestador no front. 3 colunas
-// nomeadas em vez de uma tabela separada (avaliacoes_fotos) de propósito:
-// é um número FIXO e pequeno de slots (não uma lista de tamanho
-// variável), então uma tabela própria só pra 3 linhas por avaliação seria
-// complexidade sem ganho real aqui — mesmo raciocínio que já levou a
-// foto_url ser coluna direta em vez de tabela desde o início.
-if (!colunasAvaliacoes.some(c => c.name === "foto_url2")) {
-    db.exec("ALTER TABLE avaliacoes ADD COLUMN foto_url2 TEXT");
-    console.log("[db] migração aplicada: avaliacoes.foto_url2");
-}
-if (!colunasAvaliacoes.some(c => c.name === "foto_url3")) {
-    db.exec("ALTER TABLE avaliacoes ADD COLUMN foto_url3 TEXT");
-    console.log("[db] migração aplicada: avaliacoes.foto_url3");
-}
-
 // avatar_url: foto de perfil do Google (payload.picture do ID token),
 // guardada no login — ver routes/usuarios.js. É só uma URL do CDN do
 // Google (lh3.googleusercontent.com), não um arquivo nosso; guardamos
@@ -56,6 +39,20 @@ const colunasUsuarios = db.prepare("PRAGMA table_info(usuarios)").all();
 if (!colunasUsuarios.some(c => c.name === "avatar_url")) {
     db.exec("ALTER TABLE usuarios ADD COLUMN avatar_url TEXT");
     console.log("[db] migração aplicada: usuarios.avatar_url");
+}
+
+// cpf_cnpj: número declarado pela própria conta (ver POST /entrar-google
+// não mexe nisso — só PATCH /:id, editável em "Preferências da conta").
+// NÃO é validado contra a Receita Federal nem confere identidade — é só
+// dígitos armazenados como texto (com formatação aplicada na hora de
+// exibir, não na hora de salvar). Guardado como TEXT (não INTEGER) por
+// dois motivos: CPF pode começar com zero (perderia o dígito num campo
+// numérico) e o valor nunca é usado em conta matemática, só comparação/
+// exibição. NULL = não informado (selo não aparece — ver
+// SELECT_PRESTADORES_COM_NOTA em formatarPrestador.js).
+if (!colunasUsuarios.some(c => c.name === "cpf_cnpj")) {
+    db.exec("ALTER TABLE usuarios ADD COLUMN cpf_cnpj TEXT");
+    console.log("[db] migração aplicada: usuarios.cpf_cnpj");
 }
 
 // dias_semana: array JSON de dias em que o prestador funciona (ver

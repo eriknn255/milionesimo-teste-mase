@@ -36,7 +36,7 @@ async function initApp() {
                 position: absolute;
                 transform: translate(-50%, calc(-100% - 46px));
                 width: 270px;
-                background-color: #ffffff;
+                background-color: ;
                 border-radius: 20px;
                 box-shadow: 0 10px 30px rgba(10,11,20,0.14), 0 2px 8px rgba(10,11,20,0.08);
                 z-index: 20;
@@ -65,7 +65,8 @@ async function initApp() {
                         ${avatarHTML(prestador, "MapPopupAvatar")}
                         <div>
                             <div class="MapPopupName">${prestador.nome}</div>
-                            <div class="MapPopupCategory">${prestador.categoria}</div>
+                            <div class="MapPopupCategory">${prestador.categoria}${seloDocumentoHTML(prestador)}</div>
+                            
                         </div>
                     </div>
                     <div class="MapPopupRating${nota.temNota ? "" : " is-empty"}">${nota.estrelas}${nota.temNota ? ` <span>(${nota.contagem})</span>` : ""}</div>
