@@ -11,6 +11,7 @@
 </head>
 
 <body>
+    <gmp-map id="map" center="-6.4947435,-43.7023851" zoom="17" map-id="11668dd49e3ef62f968278aa"></gmp-map>
     <!-- ==========================================================================
          PÁGINA: HOME
          Único lugar onde o mapa (busca, gmp-map, controles) existe de fato.
@@ -18,7 +19,7 @@
          troca do Dock já indica qual está selecionada. Ver .Page em
          style.css e trocarAba() em script.js.
          ========================================================================== -->
-    <div class="Page is-active" id="page-home">
+    <div class="Page home is-active" id="page-home">
         <header>
             <div class="SearchWrap">
                 <form class="SearchRow" id="searchForm" autocomplete="off">
@@ -62,12 +63,14 @@
                      ====================================================================== -->
                 <div class="ChipsRow" id="chipsRow"></div>
 
-                <div class="ResultsList" id="resultsList" hidden></div>
+                <div class="ResultsListGlass" id="resultsList" hidden>
+                    <div class="ResultsList" id="resultsListScroll"></div>
+                </div>
             </div>
         </header>
 
         <div class="MapWrap">
-            <gmp-map id="map" center="-6.4947435,-43.7023851" zoom="17" map-id="11668dd49e3ef62f968278aa"></gmp-map>
+            <!--<gmp-map id="map" center="-6.4947435,-43.7023851" zoom="17" map-id="11668dd49e3ef62f968278aa"></gmp-map>-->
 
             <div class="MapControls">
 
@@ -154,13 +157,13 @@
     <div class="Page" id="page-profile">
         <div class="ProfileWrap" id="profileLoggedOut">
             <svg CLASS="ProfileLoggedOutIcon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path class="IconShape"
-                                d="M12 11C14.4853 11 16.5 8.98528 16.5 6.5C16.5 4.01472 14.4853 2 12 2C9.51472 2 7.5 4.01472 7.5 6.5C7.5 8.98528 9.51472 11 12 11Z"
-                                stroke-linecap="round" stroke-linejoin="round"></path>
-                            <path class="IconShape"
-                                d="M5 18.5714C5 16.0467 7.0467 14 9.57143 14H14.4286C16.9533 14 19 16.0467 19 18.5714C19 20.465 17.465 22 15.5714 22H8.42857C6.53502 22 5 20.465 5 18.5714Z">
-                            </path>
-                        </svg>
+                <path class="IconShape"
+                    d="M12 11C14.4853 11 16.5 8.98528 16.5 6.5C16.5 4.01472 14.4853 2 12 2C9.51472 2 7.5 4.01472 7.5 6.5C7.5 8.98528 9.51472 11 12 11Z"
+                    stroke-linecap="round" stroke-linejoin="round"></path>
+                <path class="IconShape"
+                    d="M5 18.5714C5 16.0467 7.0467 14 9.57143 14H14.4286C16.9533 14 19 16.0467 19 18.5714C19 20.465 17.465 22 15.5714 22H8.42857C6.53502 22 5 20.465 5 18.5714Z">
+                </path>
+            </svg>
             <div class="ProfileLoggedOutTitle">Entrar</div>
             <div class="ProfileLoggedOutText">Sua conta Google identifica você — sem senha própria pra criar ou
                 esquecer.</div>
@@ -256,25 +259,8 @@
                         <span class="ToggleSwitchKnob"></span>
                     </button>
                 </div>
-                <div class="SettingsRow">
-                    <span>Avisos por WhatsApp</span>
-                    <button type="button" class="ToggleSwitch" id="toggleNotifWhatsapp" role="switch"
-                        aria-checked="false">
-                        <span class="ToggleSwitchKnob"></span>
-                    </button>
-                </div>
-            </div>
-
-            <div class="SettingsSection">
-                <div class="SettingsSectionTitle">Privacidade</div>
-                <div class="SettingsRow">
-                    <span>Compartilhar localização exata</span>
-                    <button type="button" class="ToggleSwitch" id="toggleLocalExata" role="switch" aria-checked="true">
-                        <span class="ToggleSwitchKnob"></span>
-                    </button>
-                </div>
-                <div class="SettingsHint">Quando desativado, prestadores veem só sua região aproximada, não o ponto
-                    exato.</div>
+                <div class="SettingsHint">Controla o banner de avisos dentro do app (avaliação nova pra revisar,
+                    decisão sobre sua avaliação, prestador salvo) — ainda não existe push nativo do aparelho.</div>
             </div>
 
             <div class="SettingsSection">
@@ -324,7 +310,8 @@
                 <button type="button" class="NotifPanelMarkAll" id="notifMarkAllBtn">Marcar tudo como lido</button>
                 <button type="button" class="CadastroOverlayClose" id="notifPanelCloseBtn" aria-label="Fechar">
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                        <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round"></path>
                     </svg>
                 </button>
             </div>
@@ -352,8 +339,7 @@
     <footer>
         <div class="bottom-flexbox">
             <div class="Dock ThemedControl">
-                <button type="button" class="HomeButton ThemedControl is-active" data-page="home"
-                    aria-label="Tela inicial">
+                <button type="button" class="HomeButton is-active" data-page="home" aria-label="Tela inicial">
                     <span class="NavIcon">
                         <svg class="icon-oco" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path id="vector"
@@ -370,7 +356,7 @@
                     </span>
                 </button>
 
-                <button type="button" class="ListIcon ThemedControl" data-page="List" aria-label="lista de contatos">
+                <button type="button" class="ListIcon" data-page="List" aria-label="lista de contatos">
                     <span class="NavIcon">
                         <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                             <path class="IconShape"
@@ -384,7 +370,7 @@
                     </span>
                 </button>
 
-                <button type="button" class="ProfileIcon ThemedControl" data-page="profile" aria-label="Perfil">
+                <button type="button" class="ProfileIcon" data-page="profile" aria-label="Perfil">
                     <span class="NavIcon">
                         <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                             <path class="IconShape"
@@ -398,7 +384,7 @@
                     </span>
                 </button>
 
-                <button type="button" class="MenuIcon ThemedControl" data-page="menu" aria-label="Menu">
+                <button type="button" class="MenuIcon" data-page="menu" aria-label="Menu">
                     <span class="NavIcon">
                         <svg class="icon-oco" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" fill="none">
                             <line x1="2" y1="4" x2="18" y2="4" stroke="currentColor" stroke-width="1.6"

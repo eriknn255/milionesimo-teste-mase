@@ -31,6 +31,18 @@
                 </button>
                 <!-- texto preenchido via JS: também depende de LIMITE_PRESTADORES_POR_CONTA -->
                 <div class="CadastroHint" id="cadastroLimiteHint" hidden></div>
+
+                <!-- Só aparece quando existe ao menos 1 avaliação pendente (ver
+                     renderizarAvaliacoesPendentes em 00-script.js) — controla
+                     show/hide de #avaliacoesPendentesSection, que nasce
+                     recolhida (hidden) por padrão. Texto/contagem também vem
+                     de JS. -->
+                <button type="button" class="CadastroAvaliacoesToggleBtn" id="cadastroAvaliacoesToggleBtn" aria-expanded="false" hidden>
+                    <svg class="CadastroAvaliacoesToggleChevron" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+                    </svg>
+                    <span id="cadastroAvaliacoesToggleTexto">Avaliações pendentes</span>
+                </button>
             </div>
 
             <div class="CadastroFormSection" id="cadastroFormSection" hidden>

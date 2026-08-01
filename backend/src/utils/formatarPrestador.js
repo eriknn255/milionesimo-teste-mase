@@ -23,6 +23,7 @@ const SELECT_PRESTADORES_COM_NOTA = `
         u.nome AS dono_nome,
         u.avatar_url AS dono_avatar_url,
         u.avatar_customizado AS dono_avatar_customizado,
+        u.cpf_cnpj AS dono_cpf_cnpj,
         COUNT(a.id) AS avaliacoes_quantidade,
         AVG(a.nota) AS avaliacoes_media
     FROM prestadores p
@@ -64,6 +65,15 @@ function formatarPrestador(linha) {
         // já tinha a antiga em cache.
         avatarCustomizado: temDono ? (linha.dono_avatar_customizado || 0) : 0,
         capaTipo: linha.capa_tipo || "foto",
+        // SEMPRE booleano, nunca o número em si — o CPF/CNPJ da conta é
+        // dado sensível, não tem motivo pra sair de "Preferências da
+        // conta" pra um endpoint público. O selo (ver badgeDocumentoHTML
+        // em 00-script.js) só precisa saber "tem ou não tem", vale pra
+        // TODOS os prestadores da mesma conta (é a pessoa que declarou o
+        // documento, não o cadastro individual) — por isso lido aqui, no
+        // formatador compartilhado, e não como uma coluna própria em
+        // `prestadores`.
+        documentoCadastrado: temDono && !!linha.dono_cpf_cnpj,
         nota: {
             quantidade: linha.avaliacoes_quantidade || 0,
             media: linha.avaliacoes_quantidade > 0 ? linha.avaliacoes_media : null

@@ -57,6 +57,12 @@ const ICONE_SINO_HTML = `
 function mostrarBannerNotificacao({ titulo, corpo, aoTocar, iconeHtml = ICONE_RELOGIO_HTML }) {
     if (bannerAtivoEl) return; // já tem um lembrete na tela, não empilha
 
+    // "Notificações push" em Configurações — é o análogo mais próximo que
+    // esse app tem de push de verdade (não existe push nativo do aparelho
+    // ainda), então é essa preferência que gateia o banner. lerConfigApp()
+    // já resolve o padrão (ligado) quando a pessoa nunca mexeu no toggle.
+    if (typeof lerConfigApp === "function" && lerConfigApp().notifPush === false) return;
+
     const banner = document.createElement("button");
     banner.type = "button";
     banner.className = "BannerLembrete";
