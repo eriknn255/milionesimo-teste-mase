@@ -34,8 +34,12 @@ async function carregarTemplateHTML(caminho, idTemplate) {
 /* ==========================================================================
    HORÁRIO DE FUNCIONAMENTO / "ABERTO AGORA"
    horario.abre / horario.fecha em horas decimais (0–24, ex: 7.5 = 07:30).
-   estaAberto() compara com a hora local do dispositivo do usuário — sem
-   dado de fuso próprio, assume-se o mesmo fuso de quem está usando o app.
+   Esta cópia de estaAberto() só serve mais pro BADGE visual de cada card
+   (badgeHorarioHTML mais abaixo) — compara com a hora local do DISPOSITIVO
+   de quem está vendo, sem dado de fuso próprio. O filtro "aberto agora" da
+   busca em si foi pro backend (routes/prestadores.js), que usa fuso fixo
+   de Teresina/PI em vez do relógio de quem visita — evita o filtro da
+   busca e o badge do card divergirem se o fuso do aparelho estiver errado.
    Prestador sem campo "horario" é tratado como sempre aberto (fallback).
    ========================================================================== */
 
@@ -555,6 +559,10 @@ function mapearPrestadorDoBackend(p) {
         avatarCustomizado: p.avatarCustomizado || 0,
         nota: p.nota,
         capaTipo: p.capaTipo || "foto",
+        // Só vem preenchido quando a busca leva lat/lng (ver
+        // buscarPrestadores()) — o backend calcula e já devolve ordenado
+        // por proximidade; sem lat/lng na chamada, fica undefined.
+        distanciaKm: p.distanciaKm,
         // Sem isso, seloDocumentoHTML() nunca via o valor (undefined) pra
         // qualquer prestador que passasse pela busca/mapa — o backend
         // manda certo, esse mapeador que descartava no caminho.
@@ -597,10 +605,12 @@ async function carregarPrestadores() {
     }
 }
 
-// Dispara assim que o script carrega (fora de iniciarUI/initApp de
-// propósito) — corre em paralelo com o carregamento do Maps, então na
-// prática já está pronto bem antes do usuário conseguir digitar algo.
-carregarPrestadores();
+// Antes disparava aqui, fora de iniciarUI/initApp, carregando o catálogo
+// inteiro pra "esquentar" a busca local. Não existe mais: buscarPrestadores()
+// (mais abaixo) fala direto com o servidor a cada busca — pré-carregar
+// tudo no boot só baixava, pra cada visitante, dado que ninguém usava até
+// a primeira busca de verdade (o mapa já começa vazio até esse ponto de
+// qualquer forma).
 
 /* ==========================================================================
    LISTA DE SALVOS — agora via API (GET/POST/DELETE /api/usuarios/:id/salvos)
@@ -3155,6 +3165,22 @@ function avatarHTML(prestador, className) {
     `;
 }
 
+// avatarHTML() + selo de documento no canto (não mais colado no nome — ver
+// seloDocumentoHTML). Precisa de um wrapper por fora do avatar: o avatar
+// em si tem overflow:hidden (recorta a foto em círculo), e o selo "vaza"
+// um pouco da borda dele (mesma disposição do botão de câmera em
+// .ProfileAvatarBig, ver abrirEditarPerfil) — se entrasse como filho do
+// avatar, a ponta que vaza seria cortada. seloModificador é uma classe
+// extra opcional (ex: " SeloDocumentoAvatar--sm") pra escalar o selo em
+// avatares menores, como os da lista de resultados.
+function avatarComSeloHTML(prestador, className, seloModificador = "") {
+    const avatar = avatarHTML(prestador, className);
+    const selo = prestador.documentoCadastrado
+        ? `<span class="SeloDocumentoAvatar${seloModificador}">${seloDocumentoHTML(prestador)}</span>`
+        : "";
+    return `<div style="position:relative; flex-shrink:0;">${avatar}${selo}</div>`;
+}
+
 // Mesmo padrão de letra+foto usado em avatarHTML() (prestador) e no avatar
 // do próprio usuário (renderizarPaginaPerfil) — aqui pra avatar de CLIENTE
 // (quem avaliou), que não tem "categoria"/cor fixa, então cai pra letra do
@@ -3200,16 +3226,6 @@ function abrirPopup(position, prestador) {
 
 function normalizar(texto) {
     return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-}
-
-function calcularDistanciaKm(lat1, lng1, lat2, lng2) {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLng = (lng2 - lng1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 +
-        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-        Math.sin(dLng / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function formatarDistancia(km) {
@@ -3852,8 +3868,8 @@ async function abrirPerfilPrestador(prestador) {
         });
     }
 
-    slot("avatar").outerHTML = avatarHTML(prestador, "ProviderProfileAvatar");
-    slot("nome").innerHTML = `${prestador.nome}${seloDocumentoHTML(prestador)}`;
+    slot("avatar").outerHTML = avatarComSeloHTML(prestador, "ProviderProfileAvatar");
+    slot("nome").textContent = prestador.nome;
     slot("categoria").textContent = prestador.categoria;
 
     const ratingEl = slot("rating");
@@ -4323,10 +4339,10 @@ function renderizarLista(resultados) {
         item.className = "ResultItem";
         item.innerHTML = `
             <div class="ResultTopSection">
-                ${avatarHTML(prestador, "ResultAvatar")}
+                ${avatarComSeloHTML(prestador, "ResultAvatar", " SeloDocumentoAvatar--sm")}
                 <div class="ResultInfo">
                     <div class="ResultTopRow">
-                        <div class="ResultName">${prestador.nome}${seloDocumentoHTML(prestador)}</div>
+                        <div class="ResultName">${prestador.nome}</div>
                         <div class="ResultDistance">${formatarDistancia(distancia)}</div>
                     </div>
                     <div class="ResultMeta">
@@ -4423,9 +4439,9 @@ async function renderizarPaginaSalvos() {
         item.className = "ResultItem SavedItem";
         item.innerHTML = `
             <button type="button" class="SavedItemMain">
-                ${avatarHTML(prestador, "ResultAvatar")}
+                ${avatarComSeloHTML(prestador, "ResultAvatar", " SeloDocumentoAvatar--sm")}
                 <div class="ResultInfo">
-                    <div class="ResultName">${prestador.nome}${seloDocumentoHTML(prestador)}</div>
+                    <div class="ResultName">${prestador.nome}</div>
                     <div class="ResultMeta">
                         <span>${prestador.categoria}</span>
                         <span class="ResultRating${nota.temNota ? "" : " is-empty"}">${nota.estrelas}</span>
@@ -4477,9 +4493,8 @@ async function renderizarPaginaSalvos() {
     });
 }
 
-function buscarPrestadores(query) {
+async function buscarPrestadores(query) {
     ultimaQueryBuscada = query;
-    const termo = normalizar(query);
 
     // Base de cálculo da distância: a posição real do usuário (marcador
     // azul / GPS), quando já disponível. Se o GPS ainda não respondeu
@@ -4497,24 +4512,37 @@ function buscarPrestadores(query) {
 
     limparMarcadores();
 
-    const encontrados = PRESTADORES.filter(prestador => {
-        if (filtroAbertoAgora && !estaAberto(prestador)) return false;
+    // Busca por texto/tag, filtro "aberto agora" e distância/raio agora
+    // são responsabilidade do servidor (GET /api/prestadores, ver
+    // routes/prestadores.js) — o navegador não baixa mais o catálogo
+    // inteiro pra filtrar sozinho, só recebe quem já bateu com a busca.
+    const params = new URLSearchParams({ q: query, lat: baseLat, lng: baseLng });
+    if (filtroAbertoAgora) params.set("aberto", "1");
+    if (raioMaximoKm !== null) params.set("raioKm", raioMaximoKm); // null → sem limite, nem manda o parâmetro
 
-        const categoriaNorm = normalizar(prestador.categoria);
-        const nomeNorm = normalizar(prestador.nome);
-        return categoriaNorm.includes(termo) ||
-            nomeNorm.includes(termo) ||
-            prestador.tags.some(tag => normalizar(tag).includes(termo));
+    let encontrados;
+    try {
+        const resp = await fetch(`${API_BASE}/prestadores?${params}`);
+        if (!resp.ok) throw new Error(`GET /prestadores respondeu ${resp.status}`);
+        encontrados = (await resp.json()).map(mapearPrestadorDoBackend);
+    } catch (erro) {
+        console.warn("Não foi possível buscar prestadores:", erro);
+        encontrados = [];
+    }
+
+    // PRESTADORES deixou de ser "o catálogo inteiro" e virou um cache do
+    // que já foi visto nesta sessão (usado por abrirPerfilPrestadorPorId
+    // em 07-notificacoes.js como atalho antes de bater na rede de novo,
+    // com fallback se não achar — ver lá).
+    encontrados.forEach(prestador => {
+        const idx = PRESTADORES.findIndex(p => p.id === prestador.id);
+        if (idx !== -1) PRESTADORES[idx] = prestador;
+        else PRESTADORES.push(prestador);
     });
 
+    // Já vem ordenado por distância do servidor — só cria os marcadores.
     const resultados = encontrados
-        .map(prestador => ({
-            prestador,
-            distancia: calcularDistanciaKm(baseLat, baseLng, prestador.lat, prestador.lng)
-        }))
-        // raioMaximoKm === null → sem limite (ver Configurações → botão "km" no mapa)
-        .filter(item => raioMaximoKm === null || item.distancia <= raioMaximoKm)
-        .sort((a, b) => a.distancia - b.distancia)
+        .map(prestador => ({ prestador, distancia: prestador.distanciaKm }))
         .map(item => {
             const marker = criarMarcador(item.prestador);
             markers.push(marker);
