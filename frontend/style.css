@@ -895,6 +895,47 @@ footer {
     display: inline-block;
 }
 
+/* Selo no CANTO do avatar (perfil do prestador) — mesma disposição do
+   ícone de câmera em .ProfileAvatarBig (abrirEditarPerfil): span
+   absoluto no canto inferior direito, fundo próprio + anel na cor do
+   papel pra não se perder em cima de qualquer foto. Exige que o avatar
+   pai tenha position:relative (avatarHTML() já aplica isso inline). */
+.SeloDocumentoAvatar {
+    position: absolute;
+    right: -2px;
+    bottom: -2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background-color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+/* dentro do canto do avatar o selo não é mais "texto inline colado no
+   nome" — reseta o espaçamento pensado pra essa outra disposição e
+   ocupa quase todo o círculo de fundo. */
+.SeloDocumentoAvatar .SeloDocumento {
+    width: 26px;
+    height: 26px;
+    margin-left: 0;
+    vertical-align: middle;
+}
+
+/* Variante pequena — avatares de 42px (lista de resultados, salvos),
+   proporcional à mesma variante de 56px acima (~mesma razão selo/avatar). */
+.SeloDocumentoAvatar--sm {
+    width: 6px;
+    height: 6px;
+    right: -1px;
+    bottom: -1px;
+    border-width: 1.5px;
+}
+.SeloDocumentoAvatar--sm .SeloDocumento {
+    width: 21px;
+    height: 21px;
+}
+
 .ProviderProfileCategory {
     font-size: 14px;
     color: var(--muted);
@@ -2907,13 +2948,13 @@ footer {
    ação ficar sempre visível. */
 .MapControls {
     position: absolute;
-    right: 16px;
-    bottom: 16px;
     z-index: 5;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 10px;
+    right: 1.85vh;
+    bottom: 10.7vh;
+    gap: 1.4vh;
 }
 
 /* estado momentâneo enquanto centraliza, disparado via JS (classe .is-centering) */

@@ -20,6 +20,65 @@ const { validarTelefone } = require("../utils/telefone");
 const router = express.Router();
 
 // ==========================================================================
+// BUSCA — movida do front pro backend (era feita filtrando o array
+// PRESTADORES inteiro, carregado por completo no navegador de todo mundo
+// que abria o app; ver GET / mais abaixo). As três funções aqui são
+// PORTADAS QUASE VERBATIM de normalizar()/calcularDistanciaKm()/
+// estaAberto() que existiam em 00-script.js — mesma lógica, só mudou de
+// lugar, pra garantir que o resultado da busca continue idêntico ao de
+// antes (mesmo texto normalizado, mesma fórmula de distância, mesma regra
+// de horário com virada de dia).
+// ==========================================================================
+function normalizar(texto) {
+    return String(texto || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+
+function calcularDistanciaKm(lat1, lng1, lat2, lng2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// "Aberto agora" (filtroAbertoAgora no front) precisa do horário de
+// TERESINA/PI, não do relógio do servidor — antes, rodando no navegador,
+// isso vinha de graça (o celular do usuário já está no fuso dele). Aqui
+// precisa ser explícito: se o processo Node rodar num host configurado em
+// UTC (comum em nuvem), new Date().getHours() cru daria a hora errada.
+// América/Fortaleza cobre Piauí, UTC-3 o ano inteiro (Brasil não tem mais
+// horário de verão desde 2019).
+const FUSO_HORARIO_APP = "America/Fortaleza";
+
+function agoraNoFuso() {
+    const partes = new Intl.DateTimeFormat("en-US", {
+        timeZone: FUSO_HORARIO_APP,
+        weekday: "short", hour: "numeric", minute: "numeric", hour12: false
+    }).formatToParts(new Date());
+    const mapa = Object.fromEntries(partes.map(p => [p.type, p.value]));
+    const diasSemana = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    // hour12:false ocasionalmente devolve "24" à meia-noite em vez de "0"
+    // (comportamento conhecido do Intl em alguns runtimes) — normaliza.
+    const hora = Number(mapa.hour) % 24;
+    return { diaSemana: diasSemana[mapa.weekday], horaDecimal: hora + Number(mapa.minute) / 60 };
+}
+
+// Mesma assinatura/regra de estaAberto() no front: recebe o prestador já
+// FORMATADO (formatarPrestador()), com prestador.horario.{abre,fecha,dias}.
+function estaAberto(prestador) {
+    if (!prestador.horario) return true;
+    const { diaSemana, horaDecimal } = agoraNoFuso();
+    const dias = prestador.horario.dias;
+    if (Array.isArray(dias) && dias.length > 0 && !dias.includes(diaSemana)) return false;
+    const { abre, fecha } = prestador.horario;
+    // suporta virada de dia (ex: abre 22, fecha 6 → aberto durante a madrugada)
+    if (abre <= fecha) return horaDecimal >= abre && horaDecimal < fecha;
+    return horaDecimal >= abre || horaDecimal < fecha;
+}
+
+// ==========================================================================
 // LIMITE DE CADASTROS + VALIDAÇÃO DE TELEFONE
 // Sem isso, uma única conta Google (livre pra criar quantas quiser) podia
 // encher o mapa de cadastros — inclusive com telefone em qualquer formato,
@@ -64,13 +123,51 @@ function normalizarDiasSemana(diasSemana) {
 }
 
 // GET /api/prestadores
-// Substitui o array PRESTADORES inteiro (demo + cadastrados, já que no
-// front os cadastrados eram simplesmente empurrados pro mesmo array).
-// A busca por texto/tag/raio continua sendo feita no cliente, igual hoje
-// (buscarPrestadores em script.js) — aqui só devolve a lista completa.
+// Query params, todos OPCIONAIS (sem nenhum, devolve tudo — mantém
+// compatibilidade com quem já chamava sem parâmetro):
+//   q        — texto livre, casa contra nome/categoria/tags (normalizado,
+//              sem acento/maiúscula — mesma regra de sempre)
+//   aberto=1 — só quem está aberto agora (horário de Teresina/PI, ver
+//              estaAberto() acima — não é mais o relógio do aparelho)
+//   lat/lng  — origem pro cálculo de distância; sem isso, resultado não
+//              tem distanciaKm nem vem ordenado por proximidade
+//   raioKm   — só combinado com lat/lng; sem raioKm, sem limite (mesmo
+//              "sem limite" que o botão de raio no mapa já tinha)
+// Front manda a MESMA busca de sempre (buscarPrestadores() em
+// 00-script.js) — só que agora o servidor decide quem bate, em vez do
+// navegador filtrar um catálogo inteiro baixado por completo.
 router.get("/", (req, res) => {
     const linhas = db.prepare(`${SELECT_PRESTADORES_COM_NOTA} GROUP BY p.id`).all();
-    res.json(linhas.map(formatarPrestador));
+    let prestadores = linhas.map(formatarPrestador);
+
+    const { q, aberto, lat, lng, raioKm } = req.query;
+
+    if (aberto === "1") {
+        prestadores = prestadores.filter(estaAberto);
+    }
+
+    if (q !== undefined && q !== "") {
+        const termo = normalizar(q);
+        prestadores = prestadores.filter(p => {
+            const categoriaNorm = normalizar(p.categoria);
+            const nomeNorm = normalizar(p.nome);
+            return categoriaNorm.includes(termo) ||
+                nomeNorm.includes(termo) ||
+                p.tags.some(tag => normalizar(tag).includes(termo));
+        });
+    }
+
+    if (lat !== undefined && lng !== undefined) {
+        const baseLat = Number(lat), baseLng = Number(lng);
+        const raio = raioKm !== undefined && raioKm !== "" ? Number(raioKm) : null;
+
+        prestadores = prestadores
+            .map(p => ({ ...p, distanciaKm: calcularDistanciaKm(baseLat, baseLng, p.lat, p.lng) }))
+            .filter(p => raio === null || p.distanciaKm <= raio)
+            .sort((a, b) => a.distanciaKm - b.distanciaKm);
+    }
+
+    res.json(prestadores);
 });
 
 // GET /api/prestadores/meus — cadastrados por ESTE usuário (substitui

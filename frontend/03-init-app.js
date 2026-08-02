@@ -62,10 +62,10 @@ async function initApp() {
                         </svg>
                     </button>
                     <div class="MapPopupHeader">
-                        ${avatarHTML(prestador, "MapPopupAvatar")}
+                        ${avatarComSeloHTML(prestador, "MapPopupAvatar", " SeloDocumentoAvatar--sm")}
                         <div>
                             <div class="MapPopupName">${prestador.nome}</div>
-                            <div class="MapPopupCategory">${prestador.categoria}${seloDocumentoHTML(prestador)}</div>
+                            <div class="MapPopupCategory">${prestador.categoria}</div>
                             
                         </div>
                     </div>
