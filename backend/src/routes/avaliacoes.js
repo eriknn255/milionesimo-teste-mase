@@ -12,6 +12,24 @@ const { criarNotificacao } = require("../utils/criarNotificacao");
 const router = express.Router();
 
 // ==========================================================================
+// MIGRAÇÃO LEVE: foto_url/foto_url2/foto_url3 — as até-3 fotos opcionais de
+// uma avaliação. Faltavam no schema.sql (bug antigo: o código sempre usou
+// essas colunas, mas a criação da tabela nunca as declarou — só passava
+// batido em bancos onde alguém já tinha rodado um ALTER manual antes).
+// Self-healing (tenta o ALTER, ignora erro de coluna duplicada), mesmo
+// padrão de capa_tipo em prestadores.js e avatar_customizado em
+// usuarios.js — corrige sozinho um banco já existente sem precisar de
+// migration separada nem apagar nada.
+// ==========================================================================
+["foto_url", "foto_url2", "foto_url3"].forEach((coluna) => {
+    try {
+        db.exec(`ALTER TABLE avaliacoes ADD COLUMN ${coluna} TEXT`);
+    } catch (erro) {
+        if (!String(erro.message).includes("duplicate column")) throw erro;
+    }
+});
+
+// ==========================================================================
 // UPLOAD DE FOTO NA AVALIAÇÃO ("Fotos dos clientes" no perfil)
 // Fecha a implementação que estava marcada como parcial no front
 // (fotosClientesExemplo). Segue a MESMA regra da fila cega: a foto só
