@@ -261,6 +261,8 @@ router.post("/", exigirUsuario, (req, res) => {
         VALUES (@id, @nome, @categoria, @descricao, @telefone, @cor, @lat, @lng, @horario_abre, @horario_fecha, @dias_semana, @tags, @dono_usuario_id, @criado_em)
     `).run(prestador);
 
+    garantirPastaPrestador(prestador.id); // cria a pasta do prestador já no cadastro
+
     const linha = db.prepare(`${SELECT_PRESTADORES_COM_NOTA} WHERE p.id = ? GROUP BY p.id`).get(prestador.id);
     res.status(201).json(formatarPrestador(linha));
 });
@@ -373,8 +375,26 @@ function normalizarTag(texto) {
 // usuário de tentar as duas coisas ao mesmo tempo (slots 2-4 desativados
 // em modo vídeo), isso aqui é a garantia do lado do servidor.
 // ==========================================================================
-const UPLOADS_DIR_CAPA = path.join(__dirname, "../public/uploads/prestadores/capa");
-fs.mkdirSync(UPLOADS_DIR_CAPA, { recursive: true });
+// ==========================================================================
+// PASTA POR PRESTADOR: cada prestador tem uma pasta própria em
+// public/uploads/prestadores/<id> — capa (foto ou vídeo) e, a partir de
+// avaliacoes.js, também as fotos das avaliações desse prestador ficam
+// dentro dela (em vez de espalhadas por diretórios separados por tipo).
+// O "hash" é o próprio id do prestador (uuid), igual já é usado em todo
+// o resto do app.
+// ==========================================================================
+const BASE_UPLOADS_PRESTADORES = path.join(__dirname, "../public/uploads/prestadores");
+
+function pastaPrestador(id) {
+    return path.join(BASE_UPLOADS_PRESTADORES, id);
+}
+
+// Idempotente (mkdirSync recursive não erra se já existir) — chamada tanto
+// na criação do prestador (pasta já nasce pronta) quanto nas rotas de
+// upload, por segurança.
+function garantirPastaPrestador(id) {
+    fs.mkdirSync(pastaPrestador(id), { recursive: true });
+}
 
 const TAMANHO_MAXIMO_FOTO_PRESTADOR = 6 * 1024 * 1024; // 6MB, mesma folga da foto de avaliação
 
@@ -386,12 +406,12 @@ const SUFIXOS_FOTOS_CAPA = ["", "-2", "-3", "-4"];
 
 function removerFotosCapaAntigas(id) {
     SUFIXOS_FOTOS_CAPA.forEach((sufixo) => {
-        fs.rm(path.join(UPLOADS_DIR_CAPA, `${id}${sufixo}.webp`), { force: true }, () => { });
+        fs.rm(path.join(pastaPrestador(id), `capa${sufixo}.webp`), { force: true }, () => { });
     });
 }
 
 function removerVideoCapaAntigo(id) {
-    fs.rm(path.join(UPLOADS_DIR_CAPA, `${id}.mp4`), { force: true }, () => { });
+    fs.rm(path.join(pastaPrestador(id), "capa.mp4"), { force: true }, () => { });
 }
 
 const uploadFotoPrestador = multer({
@@ -451,8 +471,9 @@ router.post("/:id/foto-capa/:indice", receberFotoPrestador, exigirUsuario, exigi
     if (!req.file) return res.status(400).json({ erro: "Envie uma imagem no campo 'foto'." });
 
     try {
+        garantirPastaPrestador(req.params.id);
         const sufixo = indice === 1 ? "" : `-${indice}`;
-        const destino = path.join(UPLOADS_DIR_CAPA, `${req.params.id}${sufixo}.webp`);
+        const destino = path.join(pastaPrestador(req.params.id), `capa${sufixo}.webp`);
         await sharp(req.file.buffer)
             .rotate()
             .resize(1200, 900, { fit: "inside", withoutEnlargement: true })
@@ -552,7 +573,8 @@ router.post("/:id/capa-video", receberVideoCapaPrestador, exigirUsuario, exigirD
     if (!req.file) return res.status(400).json({ erro: "Envie um vídeo no campo 'video'." });
 
     try {
-        const destino = path.join(UPLOADS_DIR_CAPA, `${req.params.id}.mp4`);
+        garantirPastaPrestador(req.params.id);
+        const destino = path.join(pastaPrestador(req.params.id), "capa.mp4");
         await comprimirVideoCapa(req.file.buffer, destino);
 
         // Exclusividade: vídeo de capa some com as 4 fotos existentes.

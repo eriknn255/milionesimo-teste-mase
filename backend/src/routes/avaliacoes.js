@@ -24,8 +24,14 @@ const router = express.Router();
 //
 // Requer duas dependências novas: `npm install multer sharp`.
 // ==========================================================================
-const UPLOADS_DIR = path.join(__dirname, "../public/uploads/avaliacoes");
-fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+// As fotos de avaliação agora ficam DENTRO da pasta do prestador que está
+// sendo avaliado (public/uploads/prestadores/<id>/avaliacoes/), junto com
+// a capa dele (ver "PASTA POR PRESTADOR" em routes/prestadores.js) — em vez
+// de um diretório à parte agrupado só por tipo de arquivo. O "hash" da
+// pasta é o próprio id do prestador (uuid).
+function pastaAvaliacoesPrestador(prestadorId) {
+    return path.join(__dirname, "../public/uploads/prestadores", prestadorId, "avaliacoes");
+}
 
 const TAMANHO_MAXIMO_BYTES = 6 * 1024 * 1024; // 6MB — folga pra foto de celular sem exagero
 
@@ -86,11 +92,18 @@ function receberFotosOpcionais(req, res, next) {
 const LARGURA_FOTO_AVALIACAO = 1080; // 1080p: maior lado da foto trava em 1080px
 const ALTURA_FOTO_AVALIACAO = Math.round(LARGURA_FOTO_AVALIACAO * 19.5 / 9); // 2340
 
-async function salvarFotoAvaliacao(file) {
+// nomeArquivo usa o id da PRÓPRIA avaliação + o índice do slot (1 a 3),
+// não mais um uuid solto — assim as até-3 fotos de uma mesma avaliação
+// ficam visualmente juntas dentro da pasta (avaliacao-x-1.webp, -2, -3) e
+// dá pra saber de qual avaliação é um arquivo só olhando o nome.
+async function salvarFotoAvaliacao(file, prestadorId, avaliacaoId, indice) {
     if (!file) return null;
 
-    const nomeArquivo = `${uuidv4()}.webp`;
-    const caminhoAbsoluto = path.join(UPLOADS_DIR, nomeArquivo);
+    const pasta = pastaAvaliacoesPrestador(prestadorId);
+    fs.mkdirSync(pasta, { recursive: true });
+
+    const nomeArquivo = `${avaliacaoId}-${indice}.webp`;
+    const caminhoAbsoluto = path.join(pasta, nomeArquivo);
 
     await sharp(file.buffer)
         .rotate() // aplica a orientação do EXIF e descarta o campo, evita foto "deitada"
@@ -98,7 +111,7 @@ async function salvarFotoAvaliacao(file) {
         .webp({ quality: 82 })
         .toFile(caminhoAbsoluto);
 
-    return `/uploads/avaliacoes/${nomeArquivo}`;
+    return `/uploads/prestadores/${prestadorId}/avaliacoes/${nomeArquivo}`;
 }
 
 // Processa até 3 arquivos em paralelo (Promise.all — são independentes
@@ -107,8 +120,10 @@ async function salvarFotoAvaliacao(file) {
 // não veio preenchido) — os 3 valores mapeiam direto pras colunas
 // foto_url/foto_url2/foto_url3 na hora do INSERT, sem precisar de lógica
 // condicional a mais lá.
-async function salvarFotosAvaliacao(files = []) {
-    const urls = await Promise.all(files.slice(0, 3).map(salvarFotoAvaliacao));
+async function salvarFotosAvaliacao(files = [], prestadorId, avaliacaoId) {
+    const urls = await Promise.all(
+        files.slice(0, 3).map((file, i) => salvarFotoAvaliacao(file, prestadorId, avaliacaoId, i + 1))
+    );
     while (urls.length < 3) urls.push(null);
     return urls;
 }
@@ -154,9 +169,13 @@ router.post("/prestadores/:id/avaliacoes", receberFotosOpcionais, exigirUsuario,
         return res.status(400).json({ erro: "comentario é obrigatório e nota precisa ser um inteiro de 1 a 5." });
     }
 
+    // Gerado ANTES de salvar as fotos de propósito: o nome dos arquivos
+    // (avaliacaoId-1.webp etc, ver salvarFotoAvaliacao) precisa desse id.
+    const avaliacaoId = uuidv4();
+
     let fotoUrl, fotoUrl2, fotoUrl3;
     try {
-        [fotoUrl, fotoUrl2, fotoUrl3] = await salvarFotosAvaliacao(req.files);
+        [fotoUrl, fotoUrl2, fotoUrl3] = await salvarFotosAvaliacao(req.files, req.params.id, avaliacaoId);
     } catch (erro) {
         console.error("Falha ao processar fotos da avaliação:", erro);
         return res.status(400).json({ erro: "Não foi possível processar as fotos enviadas. Tente outras imagens." });
@@ -167,7 +186,7 @@ router.post("/prestadores/:id/avaliacoes", receberFotosOpcionais, exigirUsuario,
     const viaWhatsapp = !!clique && (Date.now() - clique.criado_em) < JANELA_TAG_WHATSAPP_MS;
 
     const avaliacao = {
-        id: uuidv4(),
+        id: avaliacaoId,
         prestador_id: req.params.id,
         autor_nome: autorNome,
         autor_usuario_id: req.usuario.id,

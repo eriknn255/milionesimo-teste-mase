@@ -3,23 +3,6 @@ const path = require("path");
 const express = require("express");
 const cors = require("cors");
 
-// ==========================================================================
-// express-async-errors: SEM ISSO, um erro síncrono (ex: SQL com coluna que
-// não existe) dentro de uma rota `async (req, res) => {...}` NÃO cai
-// sozinho no error handler lá embaixo — no Express 4, promise rejeitada de
-// handler async é só... ignorada. A requisição nunca recebe resposta, o
-// cliente fica esperando até o proxy (nginx/load balancer) desistir
-// sozinho (504 Gateway Timeout) — muito pior que um 500 rápido, porque
-// nem aparece direito no log da requisição, só trava.
-// Achado ao vivo: POST /prestadores/:id/avaliacoes (poi tentava INSERT
-// numa coluna que não existia — ver migração foto_url2/foto_url3 em
-// db.js) e o mesmíssimo padrão em POST /usuarios/entrar-google e outras
-// 3 rotas async — preferível corrigir a causa (esse import, 1 linha) a
-// caçar try/catch rota por rota e continuar vulnerável em qualquer
-// handler async novo que alguém escrever depois.
-// Precisa: `npm install express-async-errors` no servidor.
-require("express-async-errors");
-
 require("./db"); // aplica schema + semeia demo antes de tudo
 
 const { identificarUsuario } = require("./middleware/identidade");

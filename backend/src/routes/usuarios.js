@@ -40,8 +40,28 @@ try {
     if (!String(erro.message).includes("duplicate column")) throw erro;
 }
 
-const UPLOADS_DIR_AVATAR_USUARIO = path.join(__dirname, "../public/uploads/usuarios/avatar");
-fs.mkdirSync(UPLOADS_DIR_AVATAR_USUARIO, { recursive: true });
+// ==========================================================================
+// PASTA POR USUÁRIO: cada conta tem uma pasta própria em
+// public/uploads/usuarios/<id>, onde ficam TODOS os arquivos dela (por
+// enquanto só o avatar, mas é o lugar pra qualquer arquivo novo dessa
+// conta no futuro, sem precisar inventar outro esquema de nome).
+// O "hash" é o próprio id da conta (uuid), que já é usado assim em todo
+// o resto do app (URLs, dono_usuario_id etc.) — não é um hash calculado
+// à parte.
+// ==========================================================================
+const BASE_UPLOADS_USUARIOS = path.join(__dirname, "../public/uploads/usuarios");
+
+function pastaUsuario(id) {
+    return path.join(BASE_UPLOADS_USUARIOS, id);
+}
+
+// Garante que a pasta da conta existe antes de gravar algo nela. Chamada
+// tanto na criação da conta (pasta já nasce pronta) quanto, por segurança,
+// na hora do upload em si (idempotente — mkdirSync com recursive não erra
+// se já existir — cobre contas antigas de antes dessa mudança).
+function garantirPastaUsuario(id) {
+    fs.mkdirSync(pastaUsuario(id), { recursive: true });
+}
 
 const TAMANHO_MAXIMO_AVATAR_USUARIO = 6 * 1024 * 1024; // 6MB, mesma folga usada nas fotos de prestador
 
@@ -136,6 +156,7 @@ router.post("/entrar-google", async (req, res) => {
             INSERT INTO usuarios (id, nome, email, google_sub, telefone, avatar_url, criado_em)
             VALUES (@id, @nome, @email, @google_sub, NULL, @avatar_url, @criado_em)
         `).run(novo);
+        garantirPastaUsuario(novo.id); // cria a pasta da conta já no cadastro
         usuario = { id: novo.id, nome: novo.nome, email: novo.email, telefone: null, cpfCnpj: null, avatarUrl: novo.avatar_url, avatarCustomizado: 0 };
     } else {
         // Login em conta já existente: a foto do Google pode ter mudado
@@ -240,7 +261,8 @@ router.post("/:id/avatar", receberAvatarUsuario, exigirUsuario, async (req, res)
     if (!req.file) return res.status(400).json({ erro: "Envie uma imagem no campo 'foto'." });
 
     try {
-        const destino = path.join(UPLOADS_DIR_AVATAR_USUARIO, `${req.params.id}.webp`);
+        garantirPastaUsuario(req.params.id);
+        const destino = path.join(pastaUsuario(req.params.id), "avatar.webp");
         await sharp(req.file.buffer)
             .rotate()
             .resize(500, 500, { fit: "cover", position: "centre" })
@@ -271,7 +293,7 @@ router.delete("/:id/avatar", exigirUsuario, (req, res) => {
     }
 
     db.prepare("UPDATE usuarios SET avatar_customizado = 0 WHERE id = ?").run(req.params.id);
-    fs.rm(path.join(UPLOADS_DIR_AVATAR_USUARIO, `${req.params.id}.webp`), { force: true }, () => {});
+    fs.rm(path.join(pastaUsuario(req.params.id), "avatar.webp"), { force: true }, () => {});
     res.status(204).end();
 });
 

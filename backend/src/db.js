@@ -31,24 +31,6 @@ if (!colunasAvaliacoes.some(c => c.name === "foto_url")) {
     console.log("[db] migração aplicada: avaliacoes.foto_url");
 }
 
-// foto_url2/foto_url3: 2º e 3º slot de foto por avaliação (até 3 no
-// total — ver salvarFotosAvaliacao() em routes/avaliacoes.js). Essa
-// migração ficou faltando quando o recurso foi de "1 foto" pra "até 3":
-// o código em routes/avaliacoes.js já assumia as duas colunas em 3
-// lugares (INSERT, GET .../ultima, GET .../fotos-clientes), mas elas
-// nunca chegaram a existir no banco — toda vez que uma dessas rotas
-// rodava, o SQLite recusava com "no such column: foto_url2" (500, ou
-// pior: um 504 vindo do proxy quando o erro estourava dentro de um
-// handler async sem try/catch — ver express-async-errors em server.js).
-if (!colunasAvaliacoes.some(c => c.name === "foto_url2")) {
-    db.exec("ALTER TABLE avaliacoes ADD COLUMN foto_url2 TEXT");
-    console.log("[db] migração aplicada: avaliacoes.foto_url2");
-}
-if (!colunasAvaliacoes.some(c => c.name === "foto_url3")) {
-    db.exec("ALTER TABLE avaliacoes ADD COLUMN foto_url3 TEXT");
-    console.log("[db] migração aplicada: avaliacoes.foto_url3");
-}
-
 // avatar_url: foto de perfil do Google (payload.picture do ID token),
 // guardada no login — ver routes/usuarios.js. É só uma URL do CDN do
 // Google (lh3.googleusercontent.com), não um arquivo nosso; guardamos
