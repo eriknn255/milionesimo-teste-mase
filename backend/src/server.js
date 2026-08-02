@@ -14,6 +14,14 @@ const { iniciarJobExpiracao } = require("./jobs/expirarAvaliacoes");
 
 const app = express();
 
+// Necessário pra req.protocol refletir o protocolo real (https) quando o
+// Node roda atrás de um proxy reverso (Nginx) que termina o TLS e repassa
+// por HTTP puro internamente. Sem isso, req.protocol sempre volta "http",
+// mesmo com o site inteiro em https — é o que fazia urlAbsolutaFoto()
+// (routes/avaliacoes.js) montar URLs http:// e o Capacitor bloquear por
+// Mixed Content. "1" = confia no primeiro hop à frente (o Nginx local).
+app.set("trust proxy", 1);
+
 app.use(cors());
 app.use(express.json());
 app.use(identificarUsuario); // anexa req.usuario (ou null) em toda request
