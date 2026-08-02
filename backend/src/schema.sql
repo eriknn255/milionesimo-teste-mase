@@ -49,6 +49,9 @@ CREATE TABLE IF NOT EXISTS avaliacoes (
     autor_usuario_id TEXT,
     nota INTEGER NOT NULL CHECK (nota BETWEEN 1 AND 5),
     comentario TEXT NOT NULL,
+    foto_url TEXT,                    -- até 3 fotos opcionais da avaliação (ver routes/avaliacoes.js)
+    foto_url2 TEXT,
+    foto_url3 TEXT,
     status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'publicada', 'rejeitada')),
     via_whatsapp INTEGER NOT NULL DEFAULT 0,
     motivo_rejeicao TEXT,
