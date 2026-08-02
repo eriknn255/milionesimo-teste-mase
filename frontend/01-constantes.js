@@ -57,14 +57,14 @@ const ATRASO_BUSCA_MS = 300;
 const ATRASO_POLLING_NOTIFICACOES_MS = 30 * 1000;
 
 // --- Placeholders de imagem ---
-const CAPA_PLACEHOLDER = "/frontend/img/placeholders/capa-placeholder.webp";
+const CAPA_PLACEHOLDER = "/img/placeholders/capa-placeholder.webp";
 const AVATAR_PLACEHOLDER = [
-    "/frontend/img/placeholders/avatar-placeholder-1.webp",
-    "/frontend/img/placeholders/avatar-placeholder-2.webp",
-    "/frontend/img/placeholders/avatar-placeholder-3.webp",
-    "/frontend/img/placeholders/avatar-placeholder-4.webp",
-    "/frontend/img/placeholders/avatar-placeholder-5.webp",
-    "/frontend/img/placeholders/avatar-placeholder-6.webp",
+    "/img/placeholders/avatar-placeholder-1.webp",
+    "/img/placeholders/avatar-placeholder-2.webp",
+    "/img/placeholders/avatar-placeholder-3.webp",
+    "/img/placeholders/avatar-placeholder-4.webp",
+    "/img/placeholders/avatar-placeholder-5.webp",
+    "/img/placeholders/avatar-placeholder-6.webp",
 ];
 
 
