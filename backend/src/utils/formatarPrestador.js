@@ -65,6 +65,18 @@ function formatarPrestador(linha) {
         // já tinha a antiga em cache.
         avatarCustomizado: temDono ? (linha.dono_avatar_customizado || 0) : 0,
         capaTipo: linha.capa_tipo || "foto",
+        // Caminho relativo até a PASTA de capa (não o arquivo em si) —
+        // o front continua sabendo os nomes fixos dentro dela
+        // (capa.webp, capa-2.webp, capa-3.webp, capa-4.webp, capa.mp4;
+        // ver fotoCapaPrestador/fotosCapaPrestador/fotoCapaVideoPrestador
+        // em 00-script.js), só não precisa mais saber a FÓRMULA da pasta
+        // em si (dono_usuario_id + "-p-" + pasta_posicao) — isso fica
+        // só aqui, um lugar só, e nunca mais corre risco de dessincronizar
+        // do que o backend realmente grava (ver routes/prestadores.js,
+        // pastaPrestador()). null pros 6 prestadores demo (sem dono,
+        // logo sem pasta de upload nenhuma) — o front já cai no
+        // placeholder normal via onerror nesse caso.
+        capaBase: temDono ? `/${linha.dono_usuario_id}-p-${linha.pasta_posicao}/capa` : null,
         // SEMPRE booleano, nunca o número em si — o CPF/CNPJ da conta é
         // dado sensível, não tem motivo pra sair de "Preferências da
         // conta" pra um endpoint público. O selo (ver badgeDocumentoHTML

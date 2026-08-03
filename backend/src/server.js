@@ -13,25 +13,20 @@ const rotasNotificacoes = require("./routes/notificacoes");
 const { iniciarJobExpiracao } = require("./jobs/expirarAvaliacoes");
 
 const app = express();
-
-// Necessário pra req.protocol refletir o protocolo real (https) quando o
-// Node roda atrás de um proxy reverso (Nginx) que termina o TLS e repassa
-// por HTTP puro internamente. Sem isso, req.protocol sempre volta "http",
-// mesmo com o site inteiro em https — é o que fazia urlAbsolutaFoto()
-// (routes/avaliacoes.js) montar URLs http:// e o Capacitor bloquear por
-// Mixed Content. "1" = confia no primeiro hop à frente (o Nginx local).
 app.set("trust proxy", 1);
 
 app.use(cors());
 app.use(express.json());
 app.use(identificarUsuario); // anexa req.usuario (ou null) em toda request
 
-// Fotos servidas do mesmo jeito que fotoPerfilPrestador/fotoCapaPrestador/
-// fotoServicoPrestador já esperam: /mase/img/prestadores/... — então o
-// front nem muda essas 3 funções quando o backend entrar no ar, só passa
-// a apontar pra esse servidor em vez de um arquivo estático solto.
-const IMG_DIR = process.env.IMG_DIR || path.join(__dirname, "..", "public", "img");
-app.use("/uploads", express.static(path.join(__dirname, "public/uploads")));
+// Fotos/vídeos servidos direto da raiz de public/<id>/... (capa, avatar,
+// reviews — ver "PASTA POR PRESTADOR"/"PASTA POR USUÁRIO" em
+// routes/prestadores.js e routes/usuarios.js). Sem segmento "/uploads"
+// no meio: quanto menos nível fixo precisa bater igual entre o caminho
+// que o front monta e o que o back grava, menor a chance de os dois
+// dessincronizarem de novo (foi exatamente isso que quebrou antes — front
+// e back concordavam em tudo, MENOS na ordem de "capa" vs "<id>").
+app.use(express.static(path.join(__dirname, "public")));
 
 app.use("/api/usuarios", rotasUsuarios);
 app.use("/api/prestadores", rotasPrestadores);

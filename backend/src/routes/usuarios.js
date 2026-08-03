@@ -41,18 +41,17 @@ try {
 }
 
 // ==========================================================================
-// PASTA POR USUÁRIO: cada conta tem uma pasta própria em
-// public/uploads/usuarios/<id>, onde ficam TODOS os arquivos dela (por
-// enquanto só o avatar, mas é o lugar pra qualquer arquivo novo dessa
-// conta no futuro, sem precisar inventar outro esquema de nome).
-// O "hash" é o próprio id da conta (uuid), que já é usado assim em todo
-// o resto do app (URLs, dono_usuario_id etc.) — não é um hash calculado
-// à parte.
+// PASTA POR USUÁRIO: cada conta tem uma pasta própria em public/<id>/avatar
+// — antes vivia em public/uploads/usuarios/<id>, mas o segmento "uploads"
+// não tinha função nenhuma (nunca existiu outro tipo de conteúdo estático
+// fora de uploads) e só acrescentava mais um nível pra bater entre front e
+// back. O "hash" continua sendo o próprio id da conta (uuid), igual já é
+// usado em todo o resto do app.
 // ==========================================================================
-const BASE_UPLOADS_USUARIOS = path.join(__dirname, "../public/uploads/usuarios");
+const BASE_UPLOADS_USUARIOS = path.join(__dirname, "../public");
 
 function pastaUsuario(id) {
-    return path.join(BASE_UPLOADS_USUARIOS, id);
+    return path.join(BASE_UPLOADS_USUARIOS, id, "avatar");
 }
 
 // Garante que a pasta da conta existe antes de gravar algo nela. Chamada

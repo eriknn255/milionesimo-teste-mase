@@ -111,6 +111,23 @@ try {
     if (!String(erro.message).includes("duplicate column")) throw erro;
 }
 
+// ==========================================================================
+// MIGRAÇÃO LEVE: pasta_posicao — a ordem (1º, 2º ou 3º, já que
+// LIMITE_PRESTADORES_POR_CONTA = 3) em que este prestador foi criado
+// dentro da conta dona dele. Grava a pasta de mídia dele como
+// "<dono_usuario_id>-p-<pasta_posicao>" (ver pastaPrestador logo abaixo).
+// Gravado UMA VEZ na criação e nunca recalculado depois — se recalculasse
+// dinamicamente a cada request, excluir um prestador do meio mudaria a
+// posição dos que vieram depois, e as fotos já salvas ficariam apontando
+// pra pasta errada (exatamente o tipo de bug de dessincronia entre
+// front/back que motivou essa reestruturação toda).
+// ==========================================================================
+try {
+    db.exec("ALTER TABLE prestadores ADD COLUMN pasta_posicao INTEGER");
+} catch (erro) {
+    if (!String(erro.message).includes("duplicate column")) throw erro;
+}
+
 // diasSemana vem do front como array de números 0-6 (0=domingo...6=sábado,
 // igual Date.getDay()). Filtra qualquer lixo (string, fora de faixa,
 // duplicata) e cai em "todos os dias" se sobrar vazio ou não vier nada —
@@ -253,12 +270,13 @@ router.post("/", exigirUsuario, (req, res) => {
         dias_semana: JSON.stringify(normalizarDiasSemana(req.body.diasSemana)),
         tags: JSON.stringify(tags),
         dono_usuario_id: req.usuario.id,
+        pasta_posicao: totalDoUsuario + 1, // 1º, 2º ou 3º prestador desta conta — ver migração acima
         criado_em: Date.now()
     };
 
     db.prepare(`
-        INSERT INTO prestadores (id, nome, categoria, descricao, telefone, cor, lat, lng, horario_abre, horario_fecha, dias_semana, tags, dono_usuario_id, criado_em)
-        VALUES (@id, @nome, @categoria, @descricao, @telefone, @cor, @lat, @lng, @horario_abre, @horario_fecha, @dias_semana, @tags, @dono_usuario_id, @criado_em)
+        INSERT INTO prestadores (id, nome, categoria, descricao, telefone, cor, lat, lng, horario_abre, horario_fecha, dias_semana, tags, dono_usuario_id, pasta_posicao, criado_em)
+        VALUES (@id, @nome, @categoria, @descricao, @telefone, @cor, @lat, @lng, @horario_abre, @horario_fecha, @dias_semana, @tags, @dono_usuario_id, @pasta_posicao, @criado_em)
     `).run(prestador);
 
     garantirPastaPrestador(prestador.id); // cria a pasta do prestador já no cadastro
@@ -376,17 +394,22 @@ function normalizarTag(texto) {
 // em modo vídeo), isso aqui é a garantia do lado do servidor.
 // ==========================================================================
 // ==========================================================================
-// PASTA POR PRESTADOR: cada prestador tem uma pasta própria em
-// public/uploads/prestadores/<id> — capa (foto ou vídeo) e, a partir de
-// avaliacoes.js, também as fotos das avaliações desse prestador ficam
-// dentro dela (em vez de espalhadas por diretórios separados por tipo).
-// O "hash" é o próprio id do prestador (uuid), igual já é usado em todo
-// o resto do app.
+// PASTA POR PRESTADOR: a mídia de capa fica em
+// public/<dono_usuario_id>-p-<pasta_posicao>/capa/ — dona é sempre a
+// CONTA (compliance: apagar a conta de alguém = apagar uma raiz de pasta
+// só, sem precisar caçar arquivo espalhado por id de prestador). O sufixo
+// "-p-N" existe só porque uma conta pode ter até
+// LIMITE_PRESTADORES_POR_CONTA (3) prestadores — sem ele, o 2º e 3º
+// prestador da mesma conta brigariam pela mesma pasta de capa.
+// pasta_posicao é gravado uma única vez na criação (ver migração leve
+// acima) e nunca recalculado — ver comentário na migração pro motivo.
 // ==========================================================================
-const BASE_UPLOADS_PRESTADORES = path.join(__dirname, "../public/uploads/prestadores");
+const BASE_UPLOADS_PRESTADORES = path.join(__dirname, "../public");
 
 function pastaPrestador(id) {
-    return path.join(BASE_UPLOADS_PRESTADORES, id);
+    const linha = db.prepare("SELECT dono_usuario_id, pasta_posicao FROM prestadores WHERE id = ?").get(id);
+    if (!linha) throw new Error(`Prestador ${id} não encontrado ao montar a pasta de mídia.`);
+    return path.join(BASE_UPLOADS_PRESTADORES, `${linha.dono_usuario_id}-p-${linha.pasta_posicao}`, "capa");
 }
 
 // Idempotente (mkdirSync recursive não erra se já existir) — chamada tanto

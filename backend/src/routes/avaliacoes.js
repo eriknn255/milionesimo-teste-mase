@@ -42,13 +42,16 @@ const router = express.Router();
 //
 // Requer duas dependências novas: `npm install multer sharp`.
 // ==========================================================================
-// As fotos de avaliação agora ficam DENTRO da pasta do prestador que está
-// sendo avaliado (public/uploads/prestadores/<id>/avaliacoes/), junto com
-// a capa dele (ver "PASTA POR PRESTADOR" em routes/prestadores.js) — em vez
-// de um diretório à parte agrupado só por tipo de arquivo. O "hash" da
-// pasta é o próprio id do prestador (uuid).
-function pastaAvaliacoesPrestador(prestadorId) {
-    return path.join(__dirname, "../public/uploads/prestadores", prestadorId, "avaliacoes");
+// As fotos de avaliação ficam na pasta de quem ENVIOU a avaliação
+// (public/<autor_usuario_id>/reviews/), não na do prestador avaliado —
+// de propósito, pra fins de compliance: se um usuário pedir remoção dos
+// próprios dados, apagar a conta dele já apaga TODAS as fotos que ele
+// mandou (avatar + reviews), numa raiz de pasta só, sem precisar
+// vasculhar a pasta de cada prestador que ele já avaliou. O "hash" da
+// pasta é o id da CONTA do autor (uuid) — sempre existe, porque enviar
+// avaliação exige login (exigirUsuario, ver rota abaixo).
+function pastaReviewsAutor(autorUsuarioId) {
+    return path.join(__dirname, "../public", autorUsuarioId, "reviews");
 }
 
 const TAMANHO_MAXIMO_BYTES = 6 * 1024 * 1024; // 6MB — folga pra foto de celular sem exagero
@@ -114,10 +117,10 @@ const ALTURA_FOTO_AVALIACAO = Math.round(LARGURA_FOTO_AVALIACAO * 19.5 / 9); // 
 // não mais um uuid solto — assim as até-3 fotos de uma mesma avaliação
 // ficam visualmente juntas dentro da pasta (avaliacao-x-1.webp, -2, -3) e
 // dá pra saber de qual avaliação é um arquivo só olhando o nome.
-async function salvarFotoAvaliacao(file, prestadorId, avaliacaoId, indice) {
+async function salvarFotoAvaliacao(file, autorUsuarioId, avaliacaoId, indice) {
     if (!file) return null;
 
-    const pasta = pastaAvaliacoesPrestador(prestadorId);
+    const pasta = pastaReviewsAutor(autorUsuarioId);
     fs.mkdirSync(pasta, { recursive: true });
 
     const nomeArquivo = `${avaliacaoId}-${indice}.webp`;
@@ -129,7 +132,7 @@ async function salvarFotoAvaliacao(file, prestadorId, avaliacaoId, indice) {
         .webp({ quality: 82 })
         .toFile(caminhoAbsoluto);
 
-    return `/uploads/prestadores/${prestadorId}/avaliacoes/${nomeArquivo}`;
+    return `/${autorUsuarioId}/reviews/${nomeArquivo}`;
 }
 
 // Processa até 3 arquivos em paralelo (Promise.all — são independentes
@@ -138,9 +141,9 @@ async function salvarFotoAvaliacao(file, prestadorId, avaliacaoId, indice) {
 // não veio preenchido) — os 3 valores mapeiam direto pras colunas
 // foto_url/foto_url2/foto_url3 na hora do INSERT, sem precisar de lógica
 // condicional a mais lá.
-async function salvarFotosAvaliacao(files = [], prestadorId, avaliacaoId) {
+async function salvarFotosAvaliacao(files = [], autorUsuarioId, avaliacaoId) {
     const urls = await Promise.all(
-        files.slice(0, 3).map((file, i) => salvarFotoAvaliacao(file, prestadorId, avaliacaoId, i + 1))
+        files.slice(0, 3).map((file, i) => salvarFotoAvaliacao(file, autorUsuarioId, avaliacaoId, i + 1))
     );
     while (urls.length < 3) urls.push(null);
     return urls;
@@ -193,7 +196,7 @@ router.post("/prestadores/:id/avaliacoes", receberFotosOpcionais, exigirUsuario,
 
     let fotoUrl, fotoUrl2, fotoUrl3;
     try {
-        [fotoUrl, fotoUrl2, fotoUrl3] = await salvarFotosAvaliacao(req.files, req.params.id, avaliacaoId);
+        [fotoUrl, fotoUrl2, fotoUrl3] = await salvarFotosAvaliacao(req.files, req.usuario.id, avaliacaoId);
     } catch (erro) {
         console.error("Falha ao processar fotos da avaliação:", erro);
         return res.status(400).json({ erro: "Não foi possível processar as fotos enviadas. Tente outras imagens." });
@@ -346,7 +349,7 @@ function decidirComoDeOwner(req, res, novoStatus, motivo = null) {
     return avaliacao;
 }
 
-// Caminho salvo no banco é sempre relativo ("/uploads/avaliacoes/x.webp").
+// Caminho salvo no banco é sempre relativo ("/{prestadorId}/reviews/x.webp").
 // Isso é o que faz sentido guardar (não amarra o registro a um host).
 // Mas devolver relativo pro front quebra em qualquer setup onde a página
 // não é servida pelo mesmo host:porta do backend (ex: front aberto via
