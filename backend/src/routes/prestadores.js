@@ -128,6 +128,25 @@ try {
     if (!String(erro.message).includes("duplicate column")) throw erro;
 }
 
+// Backfill: prestadores criados ANTES dessa migração existir ficaram com
+// pasta_posicao NULL (nunca passaram pelo INSERT novo que preenche essa
+// coluna). Preenche uma vez, por conta, na ordem de criação — idempotente
+// (só afeta linhas onde ainda é NULL, então rodar de novo não faz nada
+// nas que já foram preenchidas).
+const donosComPendencia = db.prepare(
+    "SELECT DISTINCT dono_usuario_id FROM prestadores WHERE pasta_posicao IS NULL AND dono_usuario_id IS NOT NULL"
+).all();
+if (donosComPendencia.length > 0) {
+    const atualizarPosicao = db.prepare("UPDATE prestadores SET pasta_posicao = ? WHERE id = ?");
+    donosComPendencia.forEach(({ dono_usuario_id }) => {
+        const doDono = db.prepare(
+            "SELECT id FROM prestadores WHERE dono_usuario_id = ? ORDER BY criado_em ASC, id ASC"
+        ).all(dono_usuario_id);
+        doDono.forEach((linha, indice) => atualizarPosicao.run(indice + 1, linha.id));
+    });
+    console.log(`[prestadores] backfill de pasta_posicao aplicado (${donosComPendencia.length} conta(s)).`);
+}
+
 // diasSemana vem do front como array de números 0-6 (0=domingo...6=sábado,
 // igual Date.getDay()). Filtra qualquer lixo (string, fora de faixa,
 // duplicata) e cai em "todos os dias" se sobrar vazio ou não vier nada —
