@@ -539,7 +539,15 @@ function comprimirVideoCapa(bufferOriginal, destinoFinal) {
                 //.noAudio() // sempre toca mudo — descartar o áudio economiza espaço sem perder nada da experiência
                 .outputOptions([
                     "-crf 20",
-                    "-preset slow",
+                    // "slow" pedia mais RAM do que os 908MB dessa instância
+                    // aguentam (confirmado: OOM killer matando o processo
+                    // Node inteiro no meio da compressão — dmesg/journalctl,
+                    // 03/08). "veryfast" reduz bastante o pico de memória e
+                    // CPU, ao custo de um arquivo final um pouco maior —
+                    // aceitável pro tamanho de exibição real (popup do mapa
+                    // / capa do perfil, nunca tela cheia). Se migrar pra uma
+                    // instância com mais RAM no futuro, dá pra subir de novo.
+                    "-preset veryfast",
                     "-profile:v high",
                     "-maxrate 1500k",
                     "-bufsize 7000k",
