@@ -104,3 +104,17 @@ CREATE INDEX IF NOT EXISTS idx_salvos_usuario ON salvos(usuario_id);
 -- (mais recente no topo, lida ou não) — este índice já cobre os dois usos
 -- reais: contagem de não lidas (nao-lidas) e listagem geral (GET /).
 CREATE INDEX IF NOT EXISTS idx_notificacoes_usuario ON notificacoes(usuario_id, criado_em DESC);
+
+-- Único registro que SOBREVIVE à exclusão de uma conta (ver DELETE
+-- /api/usuarios/:id em routes/usuarios.js) — de propósito, sem FOREIGN KEY
+-- pra `usuarios`: a linha em `usuarios` já não existe mais no momento em
+-- que isso é gravado, uma FK aqui faria essa própria inserção falhar.
+-- Guarda só o suficiente pra provar/auditar QUE uma conta existiu e foi
+-- excluída — nenhum dado pessoal navegável (sem nome, e-mail, telefone,
+-- foto). usuario_id continua sendo o mesmo uuid de antes, mas sozinho ele
+-- não identifica ninguém sem cruzar com um sistema externo.
+CREATE TABLE IF NOT EXISTS auditoria_contas (
+    usuario_id TEXT PRIMARY KEY,
+    criado_em INTEGER NOT NULL,
+    excluido_em INTEGER NOT NULL
+);
