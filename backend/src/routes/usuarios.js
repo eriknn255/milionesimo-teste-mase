@@ -353,4 +353,85 @@ router.delete("/:id/salvos/:prestadorId", exigirUsuario, (req, res) => {
     res.status(204).end();
 });
 
+// ==========================================================================
+// EXCLUSÃO DE CONTA — "Excluir minha conta" em Preferências (ver
+// abrirConfirmarExclusaoConta/excluirContaDefinitivamente em 00-script.js
+// no front, que já chama exatamente esse endpoint). Irreversível: some com
+// TUDO que referencia essa conta. A única coisa que sobrevive é uma linha
+// em auditoria_contas (ver schema.sql), sem nenhum dado pessoal navegável.
+// ==========================================================================
+
+// Mesma raiz de pasta usada em pastaUsuario() (avatar) e pastaReviewsAutor()
+// (avaliacoes.js) — ambas moram dentro de public/<id>/, e as pastas de
+// mídia de cada prestador que essa conta é dona moram em public/<id>-p-<N>/
+// (ver comentário "PASTA POR PRESTADOR" em routes/prestadores.js: essa
+// convenção de nomenclatura — tudo que começa com o id da conta é dela —
+// existe justamente pra isso, apagar a conta de alguém virar "apagar toda
+// pasta que começa com esse id", sem precisar caçar arquivo espalhado por
+// id de prestador). fs.rm recursive+force não erra se a pasta não existir,
+// então dá pra chamar sem checar existência antes.
+function removerArquivosDaConta(usuarioId) {
+    fs.rm(path.join(BASE_UPLOADS_USUARIOS, usuarioId), { recursive: true, force: true }, () => {});
+
+    fs.readdir(BASE_UPLOADS_USUARIOS, (erro, entradas) => {
+        if (erro) return; // public/ nem existe ainda (banco novo, zero upload até agora) — nada a limpar
+        entradas
+            .filter(nome => nome.startsWith(`${usuarioId}-p-`))
+            .forEach(nome => fs.rm(path.join(BASE_UPLOADS_USUARIOS, nome), { recursive: true, force: true }, () => {}));
+    });
+}
+
+router.delete("/:id", exigirUsuario, (req, res) => {
+    if (req.usuario.id !== req.params.id) {
+        return res.status(403).json({ erro: "Só dá pra excluir a própria conta." });
+    }
+
+    const usuario = db.prepare("SELECT criado_em FROM usuarios WHERE id = ?").get(req.params.id);
+    if (!usuario) return res.status(404).json({ erro: "Conta não encontrada." });
+
+    // Tudo numa transação só: ou a conta some por inteiro, ou nada muda —
+    // não existe estado "meio excluída" se algo falhar no meio do caminho.
+    // Ordem importa: primeiro tudo que referencia usuarioId como FK (senão
+    // o DELETE final em `usuarios` esbarra em FOREIGN KEY constraint —
+    // foreign_keys=ON, ver db.js). `prestadores` fica por último desse
+    // grupo de propósito: ao removê-los, o ON DELETE CASCADE do schema
+    // arrasta sozinho qualquer avaliação/salvo/clique-de-whatsapp ainda
+    // pendurado neles — inclusive os feitos por OUTRAS contas, que é
+    // exatamente como "avaliações recebidas" some junto sem precisar de
+    // uma query própria pra isso.
+    const excluirTransacao = db.transaction((usuarioId) => {
+        db.prepare("DELETE FROM avaliacoes WHERE autor_usuario_id = ?").run(usuarioId);
+        db.prepare("DELETE FROM cliques_whatsapp WHERE usuario_id = ?").run(usuarioId);
+        db.prepare("DELETE FROM salvos WHERE usuario_id = ?").run(usuarioId);
+        db.prepare("DELETE FROM notificacoes WHERE usuario_id = ?").run(usuarioId);
+        db.prepare("DELETE FROM prestadores WHERE dono_usuario_id = ?").run(usuarioId);
+
+        db.prepare(`
+            INSERT INTO auditoria_contas (usuario_id, criado_em, excluido_em)
+            VALUES (?, ?, ?)
+        `).run(usuarioId, usuario.criado_em, Date.now());
+
+        db.prepare("DELETE FROM usuarios WHERE id = ?").run(usuarioId);
+    });
+
+    try {
+        excluirTransacao(req.params.id);
+    } catch (erro) {
+        console.error("Falha ao excluir conta:", erro);
+        return res.status(500).json({ erro: "Não foi possível excluir a conta agora. Tente de novo em instantes." });
+    }
+
+    // Fora da transação de propósito — são arquivos, não SQL; não rodam
+    // nem revertem junto com o COMMIT/ROLLBACK do banco acima. Só chega
+    // aqui depois que o banco já confirmou a exclusão de verdade, então
+    // não tem risco de apagar arquivo de uma exclusão que acabou falhando.
+    // O token de sessão dessa pessoa (JWT) não precisa ser invalidado à
+    // parte: a próxima request com ele passa por identificarUsuario, que
+    // já busca o usuário no banco (ver middleware/identidade.js) — sem a
+    // linha, req.usuario vira null sozinho, igual sessão expirada.
+    removerArquivosDaConta(req.params.id);
+
+    res.status(204).end();
+});
+
 module.exports = router;
